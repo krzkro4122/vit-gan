@@ -18,7 +18,7 @@ import utils
 def exp_mov_avg(Gs, G, alpha=0.999, global_step=999):
     alpha = min(1 - 1 / (global_step + 1), alpha)
     for ema_param, param in zip(Gs.parameters(), G.parameters()):
-        ema_param.data.mul_(alpha).add_(1 - alpha, param.data)
+        ema_param.data.mul_(alpha).add_(param.data, alpha=1 - alpha)
 
 
 def train(generator, generator_s, discriminator, optim_g, optim_d, data_loader, device):

@@ -1,6 +1,8 @@
 import torch
 import torchvision
 
+from PIL import Image
+
 from torch.utils.data import Dataset, Sampler
 
 
@@ -12,6 +14,7 @@ class LSUNBedroomDataset(Dataset):
 
     def __getitem__(self, idx):
         filename = self.filenames[idx]
+        # image = Image.open(filename, "r")
         image = torchvision.io.read_image(filename)
         # Resize and normalize the image
         image = self.transform(image)
@@ -23,7 +26,7 @@ class LSUNBedroomDataset(Dataset):
 
 class InfiniteSampler(Sampler):
     def __init__(self, data_source):
-        super(InfiniteSampler, self).__init__(data_source)
+        # super(InfiniteSampler, self).__init__(data_source)
         self.N = len(data_source)
 
     def __iter__(self):
