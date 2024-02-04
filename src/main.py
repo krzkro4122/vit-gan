@@ -1,4 +1,3 @@
-import argparse
 import copy
 import os
 
@@ -9,8 +8,8 @@ import torchvision.transforms as T
 
 from rich.progress import track
 from torchvision.utils import make_grid
+from cli import get_parser
 
-from constants import Constants
 import models
 import utils
 
@@ -21,45 +20,45 @@ def exp_mov_avg(Gs, G, alpha=0.999, global_step=999):
         ema_param.data.mul_(alpha).add_(param.data, alpha=1 - alpha)
 
 
-def train(generator, generator_s, discriminator, optim_g, optim_d, data_loader, device):
+def train():
     fixed_noise = torch.FloatTensor(np.random.normal(0, 1, (16, args.latent_dim))).to(
         device
     )
     for step in track(range(args.steps + 1)):
         # Train Discriminator
-        optim_d.zero_grad()
+        discriminator_optimizer.zero_grad()
 
         # Forward + Backward with real images
-        r_img = next(data_loader).to(device)
-        r_label = torch.ones(args.batch_size).to(device)
-        r_logit = discriminator(r_img).flatten()
-        lossD_real = criterion(r_logit, r_label)
-        lossD_real.backward()
+        real_image = next(data_loader).to(device)
+        real_label = torch.ones(args.batch_size).to(device)
+        real_logit = discriminator(real_image).flatten()
+        loss_discriminator_real = criterion(real_logit, real_label)
+        loss_discriminator_real.backward()
 
         # Forward + Backward with fake images
         latent_vector = torch.FloatTensor(
             np.random.normal(0, 1, (args.batch_size, args.latent_dim))
         ).to(device)
-        f_img = generator(latent_vector)
-        f_label = torch.zeros(args.batch_size).to(device)
-        f_logit = discriminator(f_img).flatten()
-        lossD_fake = criterion(f_logit, f_label)
-        lossD_fake.backward()
+        fake_image = generator(latent_vector)
+        fake_label = torch.zeros(args.batch_size).to(device)
+        fake_logit = discriminator(fake_image).flatten()
+        loss_discriminator_fake = criterion(fake_logit, fake_label)
+        loss_discriminator_fake.backward()
 
-        optim_d.step()
+        discriminator_optimizer.step()
 
         # Train Generator
-        optim_g.zero_grad()
-        f_img = generator(
+        generator_optimizer.zero_grad()
+        fake_image = generator(
             torch.FloatTensor(
                 np.random.normal(0, 1, (args.batch_size, args.latent_dim))
             ).to(device)
         )
-        r_label = torch.ones(args.batch_size).to(device)
-        f_logit = discriminator(f_img).flatten()
-        lossG = criterion(f_logit, r_label)
-        lossG.backward()
-        optim_g.step()
+        real_label = torch.ones(args.batch_size).to(device)
+        fake_logit = discriminator(fake_image).flatten()
+        loss_generator = criterion(fake_logit, real_label)
+        loss_generator.backward()
+        generator_optimizer.step()
 
         exp_mov_avg(generator_s, generator, global_step=step)
 
@@ -68,63 +67,28 @@ def train(generator, generator_s, discriminator, optim_g, optim_d, data_loader, 
             vis = generator(fixed_noise).detach().cpu()
             vis = make_grid(vis, nrow=4, padding=5, normalize=True)
             vis = T.ToPILImage()(vis)
-            vis.save("samples/vis{:05d}.jpg".format(step))
+            vis.save(f"{output_folder_name}/samples/vis{step:05d}.jpg")
             generator.train()
-            print("Save sample to samples/vis{:05d}.jpg".format(step))
+            print(f"Save sample to {output_folder_name}/samples/vis{step:05d}.jpg")
 
         if (step + 1) % args.sample_interval == 0 or step == 0:
             # Save the checkpoints.
-            torch.save(generator.state_dict(), "weights/Generator.pth")
-            torch.save(generator_s.state_dict(), "weights/Generator_ema.pth")
-            torch.save(discriminator.state_dict(), "weights/Discriminator.pth")
-            print("Save model state.")
+            torch.save(
+                generator.state_dict(), f"{output_folder_name}/weights/Generator.pth"
+            )
+            torch.save(
+                generator_s.state_dict(),
+                f"{output_folder_name}/weights/Generator_ema.pth",
+            )
+            torch.save(
+                discriminator.state_dict(),
+                f"{output_folder_name}/weights/Discriminator.pth",
+            )
+            print("Saved model state.")
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--steps",
-        type=int,
-        default=Constants.NUMBER_OF_STEPS,
-        help="Number of steps for training (Default: 100000)",
-    )
-    parser.add_argument(
-        "--batch-size",
-        type=int,
-        default=Constants.BATCH_SIZE,
-        help="Size of each batches (Default: 128)",
-    )
-    parser.add_argument(
-        "--lr", type=float, default=0.002, help="Learning rate (Default: 0.002)"
-    )
-    parser.add_argument(
-        "--beta1",
-        type=float,
-        default=Constants.BETA1,
-        help="Coefficients used for computing running averages of gradient and its square",
-    )
-    parser.add_argument(
-        "--beta2",
-        type=float,
-        default=Constants.BETA2,
-        help="Coefficients used for computing running averages of gradient and its square",
-    )
-    parser.add_argument(
-        "--latent-dim", type=int, default=Constants.LATENT_VECTOR_DIMENSIONS, help="Dimensions of the latent vector"
-    )
-    parser.add_argument(
-        "--data-dir",
-        type=str,
-        default=Constants.DATA_DIR,
-        help="Data root dir of your training data",
-    )
-    parser.add_argument(
-        "--sample-interval",
-        type=int,
-        default=1000,
-        help="Interval for sampling image from generator",
-    )
-    args = parser.parse_args()
+    args = get_parser().parse_args()
 
     # Device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -133,24 +97,28 @@ if __name__ == "__main__":
     data_loader = utils.get_dataloader(args.data_dir, batch_size=args.batch_size)
 
     # Create the log folder
-    os.makedirs("weights", exist_ok=True)
-    os.makedirs("samples", exist_ok=True)
+    output_folder_name = f"output/train_{utils.get_date_code()}"
+    os.makedirs(output_folder_name, exist_ok=True)
+    os.makedirs(f"{output_folder_name}/weights", exist_ok=True)
+    os.makedirs(f"{output_folder_name}/samples", exist_ok=True)
 
     # Initialize Generator and Discriminator
     generator = models.Generator().to(device)
-    netG_s = copy.deepcopy(generator)
+    generator_s = copy.deepcopy(generator)
     discriminator = models.Discriminator().to(device)
 
     # Loss function
     criterion = nn.BCELoss()
 
     # Optimizer and lr_scheduler
-    generators_optimizer = torch.optim.Adam(
-        generator.parameters(), lr=args.lr, betas=(args.beta1, args.beta2)
+    generator_optimizer = torch.optim.Adam(
+        generator.parameters(), lr=args.learning_rate, betas=(args.beta1, args.beta2)
     )
-    discriminators_optimizer = torch.optim.Adam(
-        discriminator.parameters(), lr=args.lr, betas=(args.beta1, args.beta2)
+    discriminator_optimizer = torch.optim.Adam(
+        discriminator.parameters(),
+        lr=args.learning_rate,
+        betas=(args.beta1, args.beta2),
     )
 
     # Start Training
-    train(generator, netG_s, discriminator, generators_optimizer, discriminators_optimizer, data_loader, device)
+    train()

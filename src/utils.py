@@ -1,3 +1,4 @@
+from datetime import datetime
 from dataset import LSUNBedroomDataset, InfiniteSampler
 
 import os
@@ -37,3 +38,8 @@ def _test(dataset_path):
     grid_image = torchvision.utils.make_grid(images, nrow=4)
     torchvision.utils.save_image(grid_image, "single_sample.jpg")
     print("Saved an image to single_sample.jpg")
+
+
+def get_date_code():
+    date = datetime.now()
+    return f"{date.day}-{date.month}-{date.year}_{date.hour}-{date.minute}-{date.second}"

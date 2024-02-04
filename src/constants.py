@@ -10,3 +10,4 @@ class Constants:
     DATA_DIR = "data/bedroom_train/"
     SAMPLE_INTERVAL = 1000
     LATENT_VECTOR_DIMENSIONS = 1024
+    LEARNING_RATE = 0.002
