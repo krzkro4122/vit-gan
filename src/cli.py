@@ -12,16 +12,28 @@ def get_parser():
         help="Number of steps for training (Default: 100000)",
     )
     parser.add_argument(
-        "--batch-size",
+        "--sample-interval",
         type=int,
-        default=Constants.BATCH_SIZE,
-        help="Size of each batches (Default: 128)",
+        default=Constants.SAMPLE_INTERVAL,
+        help="Interval for sampling image from generator",
     )
     parser.add_argument(
         "--learning-rate",
         type=float,
         default=Constants.LEARNING_RATE,
         help="Learning rate (Default: 0.002)",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=Constants.BATCH_SIZE,
+        help="Size of each batches (Default: 128)",
+    )
+    parser.add_argument(
+        "--latent-dim",
+        type=int,
+        default=Constants.LATENT_VECTOR_DIMENSIONS,
+        help="Dimensions of the latent vector",
     )
     parser.add_argument(
         "--beta1",
@@ -36,21 +48,9 @@ def get_parser():
         help="Coefficients used for computing running averages of gradient and its square",
     )
     parser.add_argument(
-        "--latent-dim",
-        type=int,
-        default=Constants.LATENT_VECTOR_DIMENSIONS,
-        help="Dimensions of the latent vector",
-    )
-    parser.add_argument(
         "--data-dir",
         type=str,
-        default=Constants.DATA_DIR,
+        default=Constants.DATA_DIRECTORY,
         help="Data root dir of your training data",
-    )
-    parser.add_argument(
-        "--sample-interval",
-        type=int,
-        default=1000,
-        help="Interval for sampling image from generator",
     )
     return parser

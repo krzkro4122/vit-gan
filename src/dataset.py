@@ -1,12 +1,9 @@
-import torch
 import torchvision
 
-from PIL import Image
-
-from torch.utils.data import Dataset, Sampler
+from torch.utils.data import Dataset
 
 
-class LSUNBedroomDataset(Dataset):
+class Dataset(Dataset):
     def __init__(self, filenames, transform):
         self.filenames = filenames
         self.transform = transform
@@ -20,14 +17,3 @@ class LSUNBedroomDataset(Dataset):
 
     def __len__(self):
         return self.num_samples
-
-
-class InfiniteSampler(Sampler):
-    def __init__(self, data_source):
-        super(InfiniteSampler, self).__init__(data_source)
-        self.N = len(data_source)
-
-    def __iter__(self):
-        while True:
-            for idx in torch.randperm(self.N):
-                yield idx
