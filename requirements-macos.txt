@@ -1,0 +1,13 @@
+colorama
+ipykernel
+ipython
+jupyter_client
+jupyter_core
+matplotlib
+numpy
+opencv-python
+pillow
+scikit-learn
+scipy
+torch
+torchvision
