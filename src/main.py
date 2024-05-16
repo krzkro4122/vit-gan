@@ -111,6 +111,7 @@ if __name__ == "__main__":
     args = get_parser().parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    assert torch.cuda.is_available(), "Ten komp nie czyni CUDA!"
 
     data_loader = utils.get_dataloader(args.data_dir, batch_size=args.batch_size)
 

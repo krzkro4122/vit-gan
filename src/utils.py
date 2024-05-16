@@ -21,8 +21,18 @@ def get_dataset(dataset_path, image_size=64):
     return dataset
 
 
+def get_dataset_cifar100(image_size=64):
+    compose = [
+        T.Resize((image_size, image_size)),
+        T.ToTensor(),
+        T.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
+    ]
+    transform = T.Compose(compose)
+    return Dataset(transform=transform)
+
+
 def get_dataloader(dataset_path, img_size=64, batch_size=64):
-    dataset = get_dataset(dataset_path, img_size)
+    dataset = get_dataset_cifar100(img_size)
     data_loader = iter(
         DataLoader(
             dataset,
