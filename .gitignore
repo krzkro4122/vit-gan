@@ -3,4 +3,4 @@
 
 data/**
 **/*.pth
-*/output/*
+output/
