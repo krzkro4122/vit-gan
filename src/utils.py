@@ -1,10 +1,10 @@
-from datetime import datetime
-
+from constants import Constants
 from dataset import Dataset
-
-import os
-import glob
+from datetime import datetime
 from torch.utils.data import DataLoader, RandomSampler
+import glob
+import os
+import torch
 import torchvision.transforms as T
 
 
@@ -31,8 +31,10 @@ def get_dataset_cifar100(image_size=64):
     return Dataset(transform=transform)
 
 
-def get_dataloader(dataset_path, img_size=64, batch_size=64):
-    dataset = get_dataset_cifar100(img_size)
+def get_dataloader(image_size=64):
+    dataset_path = Constants.DATA_DIRECTORY
+    batch_size = Constants.BATCH_SIZE
+    dataset = get_dataset_cifar100(image_size=image_size)
     data_loader = iter(
         DataLoader(
             dataset,
@@ -44,8 +46,13 @@ def get_dataloader(dataset_path, img_size=64, batch_size=64):
     return data_loader
 
 
-def get_date_code():
-    date = datetime.now()
-    return (
-        f"{date.day}-{date.month}-{date.year}_{date.hour}-{date.minute}-{date.second}"
-    )
+def create_output_directories():
+    os.makedirs(Constants.OUTPUT_FOLDER_NAME, exist_ok=True)
+    os.makedirs(f"{Constants.OUTPUT_FOLDER_NAME}/weights", exist_ok=True)
+    os.makedirs(f"{Constants.OUTPUT_FOLDER_NAME}/samples", exist_ok=True)
+
+
+def get_device():
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    assert torch.cuda.is_available(), "Ten PC nie czyni CUDA'ow!"
+    return device
