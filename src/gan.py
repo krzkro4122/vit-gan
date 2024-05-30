@@ -36,15 +36,15 @@ class PytorchGAN(nn.Module):
         )
 
         self.best_criterion = {
-            "train_disc_real_loss": 10**10,
-            "train_disc_fake_loss": 10**10,
-            "train_disc_total_loss": 10**10,
-            "train_gen_loss": 10**10,
-            "val_disc_real_loss": 10**10,
-            "val_disc_fake_loss": 10**10,
-            "val_disc_total_loss": 10**10,
-            "val_gen_loss": 10**10,
-            "disc_FID": 10**10,
+            "[TRAINING] Discriminator LOSS on real data": 10**10,
+            "[TRAINING] Discriminator LOSS on fake data": 10**10,
+            "[TRAINING] Discriminator LOSS total": 10**10,
+            "[TRAINING] Generator LOSS": 10**10,
+            "[VALIDATION] Discriminator LOSS on validation data": 10**10,
+            "[VALIDATION] Discriminator LOSS on fake data": 10**10,
+            "[VALIDATION] Discriminator LOSS total": 10**10,
+            "[VALIDATION] Generator LOSS": 10**10,
+            "Discriminator FID": 10**10,
         }
         self.best_model = None
         self.best_epoch = None
@@ -213,7 +213,7 @@ class PytorchGAN(nn.Module):
         validation_data=None,
         verbose=1,
         save_images_freq=None,
-        save_criterion="disc_FID",
+        save_criterion="Discriminator FID",
         ckpt=None,
         save_model_freq=None,
         betas=(0.0, 0.99),
@@ -287,15 +287,15 @@ class PytorchGAN(nn.Module):
                     ) = self._validate(validation_data)
 
             epoch_result = {
-                "train_disc_real_loss": t_disc_real_loss,
-                "train_disc_fake_loss": t_disc_real_loss,
-                "train_disc_total_loss": t_disc_total_loss,
-                "train_gen_loss": t_gen_loss,
-                "val_disc_real_loss": v_disc_real_loss,
-                "val_disc_fake_loss": v_disc_real_loss,
-                "val_disc_total_loss": v_disc_total_loss,
-                "val_gen_loss": v_gen_loss,
-                "disc_FID": disc_fid,
+                "[TRAINING] Discriminator LOSS on real data": t_disc_real_loss,
+                "[TRAINING] Discriminator LOSS on fake data": t_disc_real_loss,
+                "[TRAINING] Discriminator LOSS total": t_disc_total_loss,
+                "[TRAINING] Generator LOSS": t_gen_loss,
+                "[VALIDATION] Discriminator LOSS on validation data": v_disc_real_loss,
+                "[VALIDATION] Discriminator LOSS on fake data": v_disc_real_loss,
+                "[VALIDATION] Discriminator LOSS total": v_disc_total_loss,
+                "[VALIDATION] Generator LOSS": v_gen_loss,
+                "Discriminator FID": disc_fid,
             }
             if self.log:
                 for k, v in epoch_result.items():

@@ -13,13 +13,10 @@ from torch.utils.tensorboard import SummaryWriter
 from vitgan import ViTGAN
 
 CONFIG_PATH = "config.json"
-DATASET_NAME = "MNIST"
+DATASET_NAME = "CIFAR10"
 
 
 def get_config():
-    start_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    save_path = os.path.join("output", start_time + f"_{DATASET_NAME}")
-
     with open(CONFIG_PATH, "rb") as f:
         config = json.load(f)
 
@@ -37,7 +34,9 @@ def get_config():
 
 
 def save_generator_test(config):
-    noise = torch.randn(config["image_size"], config["lattent_space_size"], device=config["device"])
+    noise = torch.randn(
+        config["img_size"], config["lattent_space_size"], device=config["device"]
+    )
     fake = model.generate(noise)
     img = vutils.make_grid(fake, padding=2, normalize=True)
     plt.figure(figsize=(15, 15))
@@ -71,6 +70,16 @@ def get_dataset():
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
+
+    datasetIsLoaded = True
+
+    start_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    save_path = (
+        os.path.join("output", "20240529-084154_MNIST")
+        if datasetIsLoaded
+        else os.path.join("output", start_time + f"_{DATASET_NAME}")
+    )
+
     config = get_config()
     dataset = get_dataset()
     print(dataset)
@@ -80,9 +89,13 @@ if __name__ == "__main__":
     )
 
     model = ViTGAN(**config)
+    if datasetIsLoaded:
+        checkpoint_path = os.path.join(save_path, "ckpt_20240529-084155_epoch98.ckpt")
+        model.load(checkpoint_path)
+        print(f"Loaded model from: {checkpoint_path}")
     try:
         model.fit(
-            dataloader, n_epochs=100, gen_lr=2e-5, disc_lr=2e-5, save_images_freq=1
+            dataloader, n_epochs=1000, gen_lr=2e-5, disc_lr=2e-5, save_images_freq=1
         )
     except KeyboardInterrupt:
         print(f"Training interrupted... Saving model to {config['ckpt_save_path']}")

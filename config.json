@@ -2,8 +2,8 @@
   "seed": 0,
   "n_channels": 3,
   "img_size": 64,
-  "batch_size": 256,
-  "lattent_space_size": 2048,
+  "batch_size": 128,
+  "lattent_space_size": 1024,
 
   "generator_params": {
     "feature_hidden_size": 384,
