@@ -2,11 +2,10 @@ import datetime
 import os
 
 import torch
-import torch.nn as nn
+from torch import nn
 from torchmetrics.image.fid import FrechetInceptionDistance as FID
 
 from torchvision.utils import make_grid
-from progress_bar import print_progress_bar
 
 
 class PytorchGAN(nn.Module):
@@ -14,13 +13,13 @@ class PytorchGAN(nn.Module):
         self,
         criterion="bce",
         logger=None,
-        opt="adam",
+        optimizer="adam",
         device="cpu",
         ckpt_save_path=None,
         tag="",
     ):
         super().__init__()
-        self.opt_type = opt if opt in ["sgd", "adam"] else ValueError
+        self.opt_type = optimizer if optimizer in ["sgd", "adam"] else ValueError
         self.optG = None
         self.optD = None
         self.log = logger
@@ -30,9 +29,7 @@ class PytorchGAN(nn.Module):
         self.criterion = (
             nn.MSELoss(reduction="mean")
             if criterion == "mse"
-            else nn.BCELoss(reduction="mean")
-            if criterion == "bce"
-            else criterion
+            else nn.BCELoss(reduction="mean") if criterion == "bce" else criterion
         )
 
         self.best_criterion = {
@@ -57,7 +54,7 @@ class PytorchGAN(nn.Module):
         # useful stuff that can be needed for during fit
         self.start_time = None
         self.verbose = None
-        self.n_epochs = None
+        self.number_of_epochs = None
         self.n = None
         self.tag = tag
 
@@ -71,7 +68,7 @@ class PytorchGAN(nn.Module):
         epoch_disc_fake_loss = 0
         epoch_disc_tot_loss = 0
         epoch_gen_loss = 0
-        disc_fid = 0
+        discriminator_fid = 0
 
         for idx, batch in enumerate(dataloader):
             batch_x, batch_y = batch
@@ -145,8 +142,6 @@ class PytorchGAN(nn.Module):
             epoch_disc_fake_loss += disc_fake_loss.item()
             epoch_disc_tot_loss += disc_tot_loss.item()
             epoch_gen_loss += gen_loss.item()
-            # if self.verbose == 1:
-                # print_progress_bar(idx, len(dataloader))
 
         fid_value = fid.compute()
 
@@ -194,8 +189,6 @@ class PytorchGAN(nn.Module):
             epoch_disc_fake_loss += disc_fake_loss.item()
             epoch_disc_tot_loss += disc_tot_loss.item()
             epoch_gen_loss += gen_loss.item()
-            # if self.verbose == 1:
-                # print_progress_bar(idx, len(dataloader))
 
         return (
             epoch_disc_real_loss / len(dataloader),
@@ -207,12 +200,12 @@ class PytorchGAN(nn.Module):
     def fit(
         self,
         dataloader,
-        n_epochs,
-        gen_lr,
-        disc_lr,
+        number_of_epochs,
+        generator_learning_rate,
+        discriminator_learning_rate,
         validation_data=None,
         verbose=1,
-        save_images_freq=50,
+        save_images_frequency=50,
         save_criterion="Discriminator FID",
         ckpt=None,
         save_model_freq=50,
@@ -230,16 +223,22 @@ class PytorchGAN(nn.Module):
         ), "Could not find the generator input shape, please specify this attribute before fitting the model"
 
         if self.opt_type == "sgd":
-            self.optG = torch.optim.SGD(params=self.generator.parameters(), lr=gen_lr)
+            self.optG = torch.optim.SGD(
+                params=self.generator.parameters(), lr=generator_learning_rate
+            )
             self.optD = torch.optim.SGD(
-                params=self.discriminator.parameters(), lr=disc_lr
+                params=self.discriminator.parameters(), lr=discriminator_learning_rate
             )
         elif self.opt_type == "adam":
             self.optG = torch.optim.Adam(
-                params=self.generator.parameters(), lr=gen_lr, betas=betas
+                params=self.generator.parameters(),
+                lr=generator_learning_rate,
+                betas=betas,
             )
             self.optD = torch.optim.Adam(
-                params=self.discriminator.parameters(), lr=disc_lr, betas=betas
+                params=self.discriminator.parameters(),
+                lr=discriminator_learning_rate,
+                betas=betas,
             )
         else:
             raise ValueError("Unknown optimizer")
@@ -259,8 +258,8 @@ class PytorchGAN(nn.Module):
             for g in self.optG.param_groups:
                 g["lr"] = state["lr"]["gen_lr"]
 
-        self.n_epochs = n_epochs
-        for n in range(start_epoch, n_epochs):
+        self.number_of_epochs = number_of_epochs
+        for n in range(start_epoch, number_of_epochs):
             self.n = n
             self.train()
             (
@@ -268,7 +267,7 @@ class PytorchGAN(nn.Module):
                 t_disc_fake_loss,
                 t_disc_total_loss,
                 t_gen_loss,
-                disc_fid,
+                discriminator_fid,
             ) = self._train_epoch(dataloader)
             v_disc_real_loss, v_disc_fake_loss, v_disc_total_loss, v_gen_loss = (
                 0,
@@ -295,7 +294,7 @@ class PytorchGAN(nn.Module):
                 "[VALIDATION] Discriminator LOSS on fake data": v_disc_real_loss,
                 "[VALIDATION] Discriminator LOSS total": v_disc_total_loss,
                 "[VALIDATION] Generator LOSS": v_gen_loss,
-                "Discriminator FID": disc_fid,
+                "Discriminator FID": discriminator_fid,
             }
             if self.log:
                 for k, v in epoch_result.items():
@@ -317,12 +316,12 @@ class PytorchGAN(nn.Module):
                         v_disc_total_loss,
                         v_disc_real_loss,
                         v_disc_fake_loss,
-                        disc_fid,
+                        discriminator_fid,
                         self.best_epoch,
                     )
                 )
 
-            if save_images_freq is not None and n % save_images_freq == 0:
+            if save_images_frequency is not None and n % save_images_frequency == 0:
                 noise = torch.randn(32, self.lattent_space_size, device=self.device)
                 fake = self.generate(noise)
                 grid = make_grid(fake)
@@ -330,7 +329,13 @@ class PytorchGAN(nn.Module):
 
             if save_model_freq is not None and n % save_model_freq == 0:
                 assert self.ckpt_save_path is not None, "Need a path to save models"
-                self.save({"gen_lr": gen_lr, "disc_lr": disc_lr}, n)
+                self.save(
+                    {
+                        "gen_lr": generator_learning_rate,
+                        "disc_lr": discriminator_learning_rate,
+                    },
+                    n,
+                )
 
         print(
             f'Training completed in {str(datetime.datetime.now() - start_time).split(".")[0]}'
@@ -345,7 +350,8 @@ class PytorchGAN(nn.Module):
         torch.save(
             self.state,
             os.path.join(
-                self.ckpt_save_path, f"ckpt_{self.tag}{self.start_time.strftime('%Y%m%d-%H%M%S')}_epoch{n}.ckpt"
+                self.ckpt_save_path,
+                f"ckpt_{self.tag}{self.start_time.strftime('%Y%m%d-%H%M%S')}_epoch{n}.ckpt",
             ),
         )
 

@@ -1,31 +1,42 @@
 import torch
-import torch.nn as nn
+from torch import nn
 
 
 class Attention(nn.Module):
-    def __init__(self, in_features, out_features, scale=None, spectral_scaling=False, lp=2, **kwargs):
+    def __init__(
+        self,
+        input_features,
+        output_features,
+        scale=None,
+        spectral_scaling=False,
+        lp=2,
+        **kwargs,
+    ):
         """
         Single head L2-attention module
-        :param in_features: number of input features
-        :param out_features: number of out features
-        :param scale: rescale factor of d(K,Q), default is out_features
+        :param input_features: number of input features
+        :param output_features: number of out features
+        :param scale: rescale factor of d(K,Q), default is output_features
         :param spectral_scaling: perform spectral rescaling of q, k, v linear layers at each forward call
         :param lp: norm used for attention, should be 1 or 2, default 2
         """
         super(Attention, self).__init__()
 
-        self.in_features      = in_features
-        self.out_features     = out_features
-        self.scale            = out_features if scale is None else scale
+        self.input_features = input_features
+        self.output_features = output_features
+        self.scale = output_features if scale is None else scale
         self.spectral_scaling = spectral_scaling
-        self.lp               = lp
+        self.lp = lp
 
-        assert lp in [1, 2], f'Unsupported norm for attention: lp={lp} but should be 1 or 2'
+        assert lp in [
+            1,
+            2,
+        ], f"Unsupported norm for attention: lp={lp} but should be 1 or 2"
         self.attention_func = self._l1att if self.lp == 1 else self._l2att
 
-        self.q = nn.Linear(self.in_features, self.out_features, bias=False)
-        self.k = nn.Linear(self.in_features, self.out_features, bias=False)
-        self.v = nn.Linear(self.in_features, self.out_features, bias=False)
+        self.q = nn.Linear(self.input_features, self.output_features, bias=False)
+        self.k = nn.Linear(self.input_features, self.output_features, bias=False)
+        self.v = nn.Linear(self.input_features, self.output_features, bias=False)
 
         if self.spectral_scaling:
             sq, sk, sv = self._get_spectrum()
@@ -41,7 +52,7 @@ class Attention(nn.Module):
         v = self.v(x)
 
         att = self.attention_func(q, k)  # we use L2 reg only in discriminator
-        att = self.softmax(att / (self.scale**(1/2))) @ v
+        att = self.softmax(att / (self.scale ** (1 / 2))) @ v
         return att
 
     def _get_spectrum(self):
@@ -64,40 +75,48 @@ class Attention(nn.Module):
 
 
 class MultiHeadSelfAttention(nn.Module):
-    def __init__(self, in_features, n_head, head_dim, output_size=None, spectral_scaling=False, lp=2, **kwargs):
+    def __init__(
+        self,
+        input_features,
+        number_of_heads,
+        head_dimension,
+        output_size=None,
+        spectral_scaling=False,
+        lp=2,
+        **kwargs,
+    ):
         """
         Multihead self L2-attention module based on L2-attention module
-        :param in_features: number of input features
-        :param n_head: number of attention heads
-        :param head_dim: output size of each attention head
-        :param output_size: final output feature number, default is n_head * head_dim
+        :param input_features: number of input features
+        :param number_of_heads: number of attention heads
+        :param head_dimension: output size of each attention head
+        :param output_size: final output feature number, default is number_of_heads * head_dimension
         :param spectral_scaling: perform spectral rescaling of q, k, v for each head
         :param lp: norm used for attention, should be 1 or 2, default 2
         """
         super(MultiHeadSelfAttention, self).__init__()
 
-        self.out_dim         = n_head * head_dim
-        self.out_features    = self.out_dim if output_size is None else output_size
+        self.out_dim = number_of_heads * head_dimension
+        self.output_features = self.out_dim if output_size is None else output_size
 
-        self.attention_heads = nn.ModuleList([Attention(in_features, head_dim, scale=self.out_dim, spectral_scaling=spectral_scaling, lp=lp) for _ in range(n_head)])
-        self.output_linear   = nn.Linear(self.out_dim, self.out_features)
+        self.attention_heads = nn.ModuleList(
+            [
+                Attention(
+                    input_features,
+                    head_dimension,
+                    scale=self.out_dim,
+                    spectral_scaling=spectral_scaling,
+                    lp=lp,
+                )
+                for _ in range(number_of_heads)
+            ]
+        )
+        self.output_linear = nn.Linear(self.out_dim, self.output_features)
 
     def forward(self, x):
         atts = []
         for attention_head in self.attention_heads:
             atts.append(attention_head(x))
         atts = torch.cat(atts, dim=-1)
-        out  = self.output_linear(atts)
+        out = self.output_linear(atts)
         return out
-
-
-if __name__ == '__main__':
-    inpt = torch.randn(100, 5)
-
-    sat  = Attention(5, 3)
-    ret  = sat(inpt)
-    print(ret.shape)
-
-    mat = MultiHeadSelfAttention(5, 4, 3, spectral_scaling=True)
-    ret = mat(inpt)
-    print(ret.shape)
