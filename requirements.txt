@@ -1,3 +1,5 @@
+tensorboard
+torchmetrics[image]
 asttokens
 certifi
 charset-normalizer

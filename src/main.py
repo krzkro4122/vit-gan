@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
 from vitgan import ViTGAN
 
-CONFIG_PATH = "config.json"
+CONFIG_PATH = f"{os.environ['HOME']}/rep/code/vit-gan/config.json"
 DATASET_NAME = "CIFAR10"
 
 
@@ -53,7 +53,7 @@ def prepare_torch():
 
 
 def get_dataset():
-    path = os.path.abspath("../data")
+    path = os.path.abspath(f"{os.environ['SCRATCH']}/data")
     return dset.CIFAR10(
         root=path,
         download=True,
@@ -71,13 +71,13 @@ def get_dataset():
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 
-    datasetIsLoaded = True
+    datasetIsLoaded = False
 
     start_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     save_path = (
-        os.path.join("output", "20240529-084154_MNIST")
+        os.path.join(f"{os.environ['SCRATCH']}/output", "20240529-084154_MNIST")
         if datasetIsLoaded
-        else os.path.join("output", start_time + f"_{DATASET_NAME}")
+        else os.path.join(f"{os.environ['SCRATCH']}/output", start_time + f"_{DATASET_NAME}")
     )
 
     config = get_config()
@@ -95,10 +95,13 @@ if __name__ == "__main__":
         print(f"Loaded model from: {checkpoint_path}")
     try:
         model.fit(
-            dataloader, n_epochs=1000, gen_lr=2e-5, disc_lr=2e-5, save_images_freq=1
+            dataloader, n_epochs=1000, gen_lr=2e-4, disc_lr=2e-4, save_images_freq=1
         )
     except KeyboardInterrupt:
-        print(f"Training interrupted... Saving model to {config['ckpt_save_path']}")
+        print(f"Ctrl + C detected")
+    except Exception as e:
+        print(f"Unforseen exception: {e}")
     finally:
+        print(f"Saving model to {config['ckpt_save_path']}")
         model.save(f'{config["ckpt_save_path"]}model.pt', model.best_epoch)
         save_generator_test(config)

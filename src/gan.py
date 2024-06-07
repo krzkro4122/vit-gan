@@ -145,8 +145,8 @@ class PytorchGAN(nn.Module):
             epoch_disc_fake_loss += disc_fake_loss.item()
             epoch_disc_tot_loss += disc_tot_loss.item()
             epoch_gen_loss += gen_loss.item()
-            if self.verbose == 1:
-                print_progress_bar(idx, len(dataloader))
+            # if self.verbose == 1:
+                # print_progress_bar(idx, len(dataloader))
 
         fid_value = fid.compute()
 
@@ -194,8 +194,8 @@ class PytorchGAN(nn.Module):
             epoch_disc_fake_loss += disc_fake_loss.item()
             epoch_disc_tot_loss += disc_tot_loss.item()
             epoch_gen_loss += gen_loss.item()
-            if self.verbose == 1:
-                print_progress_bar(idx, len(dataloader))
+            # if self.verbose == 1:
+                # print_progress_bar(idx, len(dataloader))
 
         return (
             epoch_disc_real_loss / len(dataloader),
@@ -212,10 +212,10 @@ class PytorchGAN(nn.Module):
         disc_lr,
         validation_data=None,
         verbose=1,
-        save_images_freq=None,
+        save_images_freq=50,
         save_criterion="Discriminator FID",
         ckpt=None,
-        save_model_freq=None,
+        save_model_freq=50,
         betas=(0.0, 0.99),
         **kwargs,
     ):
