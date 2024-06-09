@@ -125,4 +125,4 @@ def get_save_path(start_time: datetime.datetime, model_is_loaded: bool):
 
 
 if __name__ == "__main__":
-    display_image(get_dataloader(4, 32, train=False, picked_dataset=dset.CIFAR10))
+    display_image(get_dataloader(4, 32, train=True, picked_dataset=dset.CIFAR10))
