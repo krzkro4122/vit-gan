@@ -19,8 +19,12 @@ CONFIG_PATH = f"{os.environ['HOME']}/rep/code/vit-gan/config.json"
 
 def display_image(data_loader: DataLoader):
     examples = next(iter(data_loader))
-    for label, img in enumerate(examples):
-        plt.imshow(img.permute(1, 2, 0))
+    for labels, images in enumerate(examples):
+        
+        plt.figure(figsize=(15, 15))
+        plt.axis("off")
+        plt.title("Fake Images")
+        plt.imshow(img)
         plt.show()
         print(f"Label: {label}")
 
@@ -32,17 +36,6 @@ def get_device():
     else:
         print("Ten PC nie czyni CUDA'ow!")
     return device
-
-
-def l2normalize(v, eps=1e-4):
-    return v / (v.norm() + eps)
-
-
-def count_params(model):
-    cpt = 0
-    for x in model.parameters():
-        cpt += x.numel()
-    return cpt
 
 
 def get_model(config, save_path: str, save_name: Optional[str] = None):
@@ -87,7 +80,7 @@ def get_dataloader(batch_size: int, image_size: int, train: bool, picked_dataset
     dataset = get_dataset(
         image_size=image_size, train=train, picked_dataset=picked_dataset
     )
-    return torch.utils.data.DataLoader(
+    return DataLoader(
         dataset,
         batch_size=batch_size,
         shuffle=True,
@@ -99,8 +92,7 @@ def get_dataset(image_size: int, train: bool, picked_dataset):
     print(f"Using dataset: {picked_dataset_label}...")
     path = os.path.abspath(f"{os.environ['SCRATCH']}/data/{picked_dataset_label}")
     print(f"Data path: {path}...")
-    return (
-        picked_dataset(
+    return picked_dataset(
             path,
             train=train,
             download=True,
@@ -112,11 +104,10 @@ def get_dataset(image_size: int, train: bool, picked_dataset):
                     transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
                 ]
             ),
-        ),
-    )
+        )
 
 
-def get_save_path(start_time: datetime.datetime, model_is_loaded: bool):
+def get_save_path(start_time: datetime, model_is_loaded: bool):
     return (
         os.path.join(f"{os.environ['SCRATCH']}/output", "20240529-084154_MNIST")
         if model_is_loaded

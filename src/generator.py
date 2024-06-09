@@ -6,7 +6,7 @@ from transformer import TransformerSLN
 from spectral_layer_norm import SLN
 from siren import SIREN
 
-from utils import count_params
+from model_utils import count_params
 
 
 class Generator(nn.Module):

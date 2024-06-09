@@ -4,7 +4,7 @@ from torch import nn
 from patch_encoder import PatchEncoder
 from transformer import Transformer
 from muilti_layer_perceptron import MLP
-from utils import count_params
+from model_utils import count_params
 
 
 class Discriminator(nn.Module):
