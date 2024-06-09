@@ -22,16 +22,6 @@ class Generator(nn.Module):
         transformer_params=None,
         **kwargs,
     ):
-        """
-        ViT Generator Class
-        :param lattent_size: number of features in the lattent space
-        :param image_size: output images size, the image will be square sized
-        :param number_of_channels: number of channel in the output images
-        :param feature_hidden_size: number of features in the transformers and output layers
-        :umber_ofparam n_transformer_layers: number of stacked transformer blocks
-        :param mapping_mlp_params: kwargs for optional parameters of the mapping MLP, mandatory args will be filled automatically
-        :param transformer_params: kwargs for optional parameters of the Transformer blocks, mandatory args will be filled automatically
-        """
         super(Generator, self).__init__()
 
         self.lattent_size = lattent_size
@@ -46,7 +36,7 @@ class Generator(nn.Module):
             {} if transformer_params is None else transformer_params
         )
 
-        self.mapping_params["in_features"], self.mapping_params["out_features"] = (
+        self.mapping_params["input_features"], self.mapping_params["output_features"] = (
             self.lattent_size,
             self.image_size * self.feature_hidden_size,
         )
@@ -57,7 +47,7 @@ class Generator(nn.Module):
         )
 
         (
-            self.transformer_params["in_features"],
+            self.transformer_params["input_features"],
             self.transformer_params["spectral_scaling"],
             self.transformer_params["lp"],
         ) = (self.feature_hidden_size, False, 1)

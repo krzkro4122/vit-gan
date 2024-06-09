@@ -12,8 +12,8 @@ from utils import (
 )
 
 
-def prepare_torch(seed: int):
-    torch.manual_seed(int)
+def prepare_torch(seed: int, config):
+    torch.manual_seed(seed)
     config["device"] = "cuda" if torch.cuda.is_available() else "cpu"
     print("Device: ", config["device"])
 
@@ -26,7 +26,7 @@ if __name__ == "__main__":
     save_path = get_save_path(start_time, modelIsLoaded)
 
     config = get_config(save_path=save_path)
-    prepare_torch(seed=config["seed"])
+    prepare_torch(seed=config["seed"], config=config)
 
     train_dataloader = get_dataloader(
         config["batch_size"],
@@ -44,8 +44,8 @@ if __name__ == "__main__":
         model.fit(
             train_dataloader,
             number_of_epochs=1000,
-            generator_learning_rate=2e-4,
-            discriminator_learning_rate=2e-4,
+            generator_learning_rate=2e-5,
+            discriminator_learning_rate=2e-5,
             save_images_frequency=1,
         )
     except KeyboardInterrupt:

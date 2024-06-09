@@ -12,14 +12,6 @@ class Attention(nn.Module):
         lp=2,
         **kwargs,
     ):
-        """
-        Single head L2-attention module
-        :param input_features: number of input features
-        :param output_features: number of out features
-        :param scale: rescale factor of d(K,Q), default is output_features
-        :param spectral_scaling: perform spectral rescaling of q, k, v linear layers at each forward call
-        :param lp: norm used for attention, should be 1 or 2, default 2
-        """
         super(Attention, self).__init__()
 
         self.input_features = input_features

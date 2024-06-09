@@ -13,19 +13,11 @@ class SIREN(nn.Module):
         omega_0=30,
         **kwargs
     ):
-        """
-        Paper: Implicit Neural Representation with Periodic Activ ation Function (SIREN
-        :param input_features: number of input features
-        :param out_features: number of output features
-        :param bias: add a bias or not to the linear transformation
-        :param is_first: first layer
-        :param omega_0: pulsation of the sine activation
-        """
         super().__init__()
         self.omega_0 = omega_0
         self.is_first = is_first
 
-        self.in_features = input_features
+        self.input_features = input_features
         self.linear = nn.Linear(input_features, output_features, bias=bias)
 
         self.initialize_weights()

@@ -19,16 +19,6 @@ class Discriminator(nn.Module):
         mlp_params=None,
         **kwargs,
     ):
-        """
-        Discriminator module for ViTGAN model
-        :param image_size: input images size, the image must be square sized
-        :param number_of_channels: number of channel in the input images
-        :param output_size: number of output features per input image
-        :param number_of_transformer_layers: number of stacked transformer blocks
-        :param encoder_params: kwargs for optional parameters of the PatchEncoder, mandatory args will be filled automatically
-        :param transformer_params: kwargs for optional parameters for each Transformer block, mandatory args will be filled automatically
-        :param mlp_params: kwargs for optional parameters of the output MLP module, mandatory args will be filled automatically
-        """
         super(Discriminator, self).__init__()
 
         self.image_size = image_size
@@ -49,7 +39,7 @@ class Discriminator(nn.Module):
         self.patch_encoder = PatchEncoder(**self.encoder_params)
 
         (
-            self.transformer_params["in_features"],
+            self.transformer_params["input_features"],
             self.transformer_params["spectral_scaling"],
             self.transformer_params["lp"],
         ) = (self.patch_encoder.projection_output_size, True, 2)
@@ -60,8 +50,8 @@ class Discriminator(nn.Module):
             ]
         )
 
-        self.mlp_params["in_features"], self.mlp_params["out_features"] = (
-            self.transformer_layers[-1].in_features,
+        self.mlp_params["input_features"], self.mlp_params["output_features"] = (
+            self.transformer_layers[-1].input_features,
             self.output_size,
         )
         self.mlp = MLP(**self.mlp_params)

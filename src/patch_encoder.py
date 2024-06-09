@@ -6,29 +6,20 @@ class PatchEncoder(nn.Module):
     def __init__(
         self,
         image_size,
-        nummber_of_channels,
+        number_of_channels,
         patch_size=8,
         projection_ouput_size=None,
         overlap=2,
         dropout_rate=0.0,
         **kwargs
     ):
-        """
-        Encodes an image to a vector according to ViT process: patches, projection, cls token and positional embedding
-        :param image_size: input images size, the image must be square sized
-        :param nummber_of_channels: number of channel in the input images
-        :param patch_size: size of each patches, patches will be square sized
-        :param projection_ouput_size: number of feature at the output of the projection
-        :param overlap: number of overlapping pixels for neighbouring patches
-        :param dropout_rate: dropout rate at the final stage level
-        """
         super(PatchEncoder, self).__init__()
 
         self.patch_size = patch_size
         self.overlap = overlap
 
         self.token_size = (
-            nummber_of_channels * (self.patch_size + 2 * self.overlap) ** 2
+            number_of_channels * (self.patch_size + 2 * self.overlap) ** 2
         )
         self.stride = (
             image_size - self.patch_size - 2 * self.overlap
