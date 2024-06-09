@@ -11,6 +11,7 @@ from torchvision.utils import make_grid
 class PytorchGAN(nn.Module):
     def __init__(
         self,
+        image_size=32,
         criterion="bce",
         logger=None,
         optimizer="adam",
@@ -22,6 +23,7 @@ class PytorchGAN(nn.Module):
         self.opt_type = optimizer if optimizer in ["sgd", "adam"] else ValueError
         self.optG = None
         self.optD = None
+        self.image_size = image_size
         self.log = logger
         self.device = device
         self.ckpt_save_path = ckpt_save_path
@@ -322,10 +324,19 @@ class PytorchGAN(nn.Module):
                 )
 
             if save_images_frequency is not None and n % save_images_frequency == 0:
-                noise = torch.randn(32, self.lattent_space_size, device=self.device)
-                fake = self.generate(noise)
-                grid = make_grid(fake)
-                self.log.add_image("images", grid, n)
+                noise = torch.randn(
+                    self.image_size, self.lattent_space_size, device=self.device
+                )
+                image_tensors = self.generate(noise)
+                tensors = [
+                    make_grid(
+                        image_tensor.to(self.device)[: self.image_size], normalize=True
+                    ).cpu()
+                    for image_tensor in image_tensors
+                ]
+                image_tensors_denormalized = torch.stack(tensors)
+                image_tensors_grid = make_grid(image_tensors_denormalized)
+                self.log.add_image("images", image_tensors_grid, n)
 
             if save_model_freq is not None and n % save_model_freq == 0:
                 assert self.ckpt_save_path is not None, "Need a path to save models"
