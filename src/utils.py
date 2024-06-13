@@ -15,7 +15,8 @@ import torch
 import torchvision.utils as vutils
 
 
-CONFIG_PATH = f"{os.environ['HOME']}/rep/vit-gan/config.json"
+CONFIG_PATH_LOCAL = f"{os.environ['HOME']}/rep/vit-gan/config.json"
+CONFIG_PATH_PLGRID = f"{os.environ['HOME']}/rep/code/vit-gan/config.json"
 
 
 def denormalize(tensor, mean, std):
@@ -87,13 +88,16 @@ def get_model(config, save_path: str, save_name: Optional[str] = None):
 
 
 def get_config(save_path: str):
-    with open(CONFIG_PATH, "rb") as f:
+    
+    config_path = CONFIG_PATH_PLGRID
+
+    with open(config_path, "rb") as f:
         config = json.load(f)
 
     if not os.path.exists(save_path):
         os.makedirs(save_path)
 
-    with open(os.path.join(save_path, CONFIG_PATH), "w", encoding="utf-8") as f:
+    with open(os.path.join(save_path, config_path), "w", encoding="utf-8") as f:
         json.dump(config, f, indent=4)
 
     config["ckpt_save_path"] = save_path
