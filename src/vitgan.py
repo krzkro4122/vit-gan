@@ -1,4 +1,4 @@
-from discriminator import Discriminator
+from discriminatorCNN import Discriminator
 from generator import Generator
 from gan import PytorchGAN
 
@@ -19,20 +19,6 @@ class ViTGAN(PytorchGAN):
         tag="",
         **kwargs
     ):
-        """
-        Main VitGAN class for this project
-        :param image_size: images size, the image must be square sized
-        :param number_of_channels: number of channel of the images
-        :param lattent_space_size: umber of features in the lattent space
-        :param generator_params: kwargs for optional parameters of the Generator, mandatory args will be filled automatically
-        :param discriminator_params: kwargs for optional parameters of the Discriminator, mandatory args will be filled automatically
-        :param criterion: loss used for training, BCE or MSE
-        :param logger: tensorboard logger
-        :param optimizer: optimizer to use for training
-        :param device: cpu or cuda
-        :param ckpt_save_path: save path for training checkpoints
-        :param tag: model tag for saved file names
-        """
         super().__init__(
             criterion=criterion,
             logger=logger,
@@ -67,7 +53,7 @@ class ViTGAN(PytorchGAN):
 
         # Necessary attributes for PytorchGAN
         self.generator = Generator(**self.generator_params)
-        self.discriminator = Discriminator(**self.discriminator_params)
+        self.discriminator = Discriminator()
         self.generator_input_shape = (self.lattent_space_size,)
 
         self.generator.to(self.device)

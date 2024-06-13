@@ -15,7 +15,7 @@ import torch
 import torchvision.utils as vutils
 
 
-CONFIG_PATH = f"{os.environ['HOME']}/rep/code/vit-gan/config.json"
+CONFIG_PATH = f"{os.environ['HOME']}/rep/vit-gan/config.json"
 
 
 def denormalize(tensor, mean, std):
@@ -94,7 +94,7 @@ def get_config(save_path: str):
         os.makedirs(save_path)
 
     with open(os.path.join(save_path, CONFIG_PATH), "w", encoding="utf-8") as f:
-        json.dump(config, f)
+        json.dump(config, f, indent=4)
 
     config["ckpt_save_path"] = save_path
     writer = SummaryWriter(save_path)
