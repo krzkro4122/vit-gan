@@ -20,11 +20,11 @@ class PytorchGAN(nn.Module):
         tag="",
     ):
         super().__init__()
-        self.opt_type = optimizer if optimizer in ["sgd", "adam"] else ValueError
-        self.optG = None
-        self.optD = None
+        self.optimizer_type = optimizer if optimizer in ["sgd", "adam"] else ValueError
+        self.generator_optimizer = None
+        self.discriminator_optimizer = None
         self.image_size = image_size
-        self.log = logger
+        self.logger = logger
         self.device = device
         self.ckpt_save_path = ckpt_save_path
         self.state = {}
@@ -96,7 +96,7 @@ class PytorchGAN(nn.Module):
             disc_fake_loss.backward()
 
             disc_tot_loss = disc_real_loss + disc_fake_loss
-            self.optD.step()
+            self.discriminator_optimizer.step()
 
             # Training the generator
             self.generator.zero_grad()
@@ -106,7 +106,7 @@ class PytorchGAN(nn.Module):
             )  # this time we want to backprop on the generator
             gen_loss = self.criterion(out, label)
             gen_loss.backward()
-            self.optG.step()
+            self.generator_optimizer.step()
 
             if idx in fid_batch:
                 with torch.no_grad():
@@ -211,7 +211,7 @@ class PytorchGAN(nn.Module):
         save_criterion="Discriminator FID",
         ckpt=None,
         save_model_freq=50,
-        betas=(0.0, 0.99),
+        betas=(0.5, 0.999),
         **kwargs,
     ):
         assert (
@@ -224,20 +224,20 @@ class PytorchGAN(nn.Module):
             self.generator_input_shape is not None
         ), "Could not find the generator input shape, please specify this attribute before fitting the model"
 
-        if self.opt_type == "sgd":
-            self.optG = torch.optim.SGD(
+        if self.optimizer_type == "sgd":
+            self.generator_optimizer = torch.optim.SGD(
                 params=self.generator.parameters(), lr=generator_learning_rate
             )
-            self.optD = torch.optim.SGD(
+            self.discriminator_optimizer = torch.optim.SGD(
                 params=self.discriminator.parameters(), lr=discriminator_learning_rate
             )
-        elif self.opt_type == "adam":
-            self.optG = torch.optim.Adam(
+        elif self.optimizer_type == "adam":
+            self.generator_optimizer = torch.optim.Adam(
                 params=self.generator.parameters(),
                 lr=generator_learning_rate,
                 betas=betas,
             )
-            self.optD = torch.optim.Adam(
+            self.discriminator_optimizer = torch.optim.Adam(
                 params=self.discriminator.parameters(),
                 lr=discriminator_learning_rate,
                 betas=betas,
@@ -255,9 +255,9 @@ class PytorchGAN(nn.Module):
             state = torch.load(ckpt)
             start_epoch = state["epoch"]
             self.load_state_dict(state["state_dict"])
-            for g in self.optD.param_groups:
+            for g in self.discriminator_optimizer.param_groups:
                 g["lr"] = state["lr"]["disc_lr"]
-            for g in self.optG.param_groups:
+            for g in self.generator_optimizer.param_groups:
                 g["lr"] = state["lr"]["gen_lr"]
 
         self.number_of_epochs = number_of_epochs
@@ -298,9 +298,9 @@ class PytorchGAN(nn.Module):
                 "[VALIDATION] Generator LOSS": v_gen_loss,
                 "Discriminator FID": discriminator_fid,
             }
-            if self.log:
+            if self.logger:
                 for k, v in epoch_result.items():
-                    self.log.add_scalar(k, v, n)
+                    self.logger.add_scalar(k, v, n)
 
             if epoch_result[save_criterion] <= self.best_criterion[save_criterion]:
                 self.best_criterion = epoch_result
@@ -336,7 +336,7 @@ class PytorchGAN(nn.Module):
                 ]
                 image_tensors_denormalized = torch.stack(tensors)
                 image_tensors_grid = make_grid(image_tensors_denormalized)
-                self.log.add_image("images", image_tensors_grid, n)
+                self.logger.add_image("images", image_tensors_grid, n)
 
             if save_model_freq is not None and n % save_model_freq == 0:
                 assert self.ckpt_save_path is not None, "Need a path to save models"
