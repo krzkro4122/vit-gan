@@ -1,85 +1,70 @@
 import torch
 from torch import nn
 
-from muilti_layer_perceptron import MLP
-from transformer import TransformerSLN
-from spectral_layer_norm import SLN
-from siren import SIREN
-
-from model_utils import count_params
+from src.config import MappingMLPParameters, TransformerParameters, config
+from src.muilti_layer_perceptron import MLP
+from src.transformer import TransformerSLN
+from src.spectral_layer_norm import SLN
+from src.siren import SIREN, SIRENParameters
+from src.model_utils import count_params
 
 
 class Generator(nn.Module):
-    def __init__(
-        self,
-        lattent_size,
-        image_size,
-        number_of_channels,
-        feature_hidden_size=384,
-        number_of_transformer_layers=1,
-        output_hidden_dimension=768,
-        mapping_mlp_params=None,
-        transformer_params=None,
-        **kwargs,
-    ):
-        super(Generator, self).__init__()
+    def __init__(self):
+        super().__init__()
 
-        self.lattent_size = lattent_size
-        self.image_size = image_size
-        self.feature_hidden_size = feature_hidden_size
-        self.number_of_channels = number_of_channels
-        self.number_of_transformer_layers = number_of_transformer_layers
-        self.output_hidden_dimension = output_hidden_dimension
-
-        self.mapping_params = {} if mapping_mlp_params is None else mapping_mlp_params
-        self.transformer_params = (
-            {} if transformer_params is None else transformer_params
+        self.mapping_mlp = MLP(
+            mlp_parameters=MappingMLPParameters(
+                input_features=config.lattent_space_size,
+                output_features=config.image_size * config.generator_params.feature_hidden_size,
+            )
         )
 
-        self.mapping_params["input_features"], self.mapping_params["output_features"] = (
-            self.lattent_size,
-            self.image_size * self.feature_hidden_size,
-        )
-        self.mapping_mlp = MLP(**self.mapping_params)
-
-        self.emb = torch.nn.Parameter(
-            torch.randn(self.image_size, self.feature_hidden_size)
+        self.embedding = torch.nn.Parameter(
+            torch.randn(config.image_size, config.generator_params.feature_hidden_size)
         )
 
-        (
-            self.transformer_params["input_features"],
-            self.transformer_params["spectral_scaling"],
-            self.transformer_params["lp"],
-        ) = (self.feature_hidden_size, False, 1)
+        transformer_parameters = TransformerParameters(
+            input_features=config.generator_params.feature_hidden_size,
+            spectral_scaling=False,
+            lp=1,
+        )
         self.transformer_layers = nn.ModuleList(
             [
-                TransformerSLN(**self.transformer_params)
-                for _ in range(self.number_of_transformer_layers)
+                TransformerSLN(transformer_parameters=transformer_parameters)
+                for _ in range(
+                    config.generator_params.number_of_transformer_layers
+                )
             ]
         )
-
-        self.sln = SLN(self.feature_hidden_size)
-
-        self.output_net = nn.Sequential(
-            SIREN(self.feature_hidden_size, output_hidden_dimension, is_first=True),
+        self.sln = SLN(number_of_features=config.generator_params.feature_hidden_size)
+        self.output_network = nn.Sequential(
             SIREN(
-                output_hidden_dimension,
-                self.number_of_channels * self.image_size,
-                is_first=False,
+                siren_parameters=SIRENParameters(
+                    input_features=config.generator_params.feature_hidden_size,
+                    output_features=config.generator_params.output_hidden_dimension,
+                    is_first=True,
+                )
+            ),
+            SIREN(
+                siren_parameters=SIRENParameters(
+                    input_features=config.generator_params.output_hidden_dimension,
+                    output_features=config.number_of_channels * config.image_size,
+                    is_first=False,
+                )
             ),
         )
-
         print(f"Generator model with {count_params(self)} parameters ready")
 
     def forward(self, x):
         weights = self.mapping_mlp(x).view(
-            -1, self.image_size, self.feature_hidden_size
+            -1, config.image_size, config.generator_params.feature_hidden_size
         )
-        h = self.emb
+        h = self.embedding
         for tf in self.transformer_layers:
             weights, h = tf(h, weights)
         weights = self.sln(h, weights)
-        result = self.output_net(weights).view(
-            x.shape[0], self.number_of_channels, self.image_size, self.image_size
+        result = self.output_network(weights).view(
+            x.shape[0], config.number_of_channels, config.image_size, config.image_size
         )
         return result

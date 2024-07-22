@@ -1,13 +1,13 @@
 from datetime import datetime
 from typing import Optional
 from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
+
 from torchvision.utils import make_grid
 import torchvision.transforms as transforms
 import torchvision.datasets as dset
-from vitgan import ViTGAN
+from src.config import config
+from src.vitgan import ViTGAN
 
-import json
 import matplotlib.pyplot as plt
 import numpy as np
 import os
@@ -28,35 +28,39 @@ def denormalize(tensor, mean, std):
     return tensor
 
 
-def display_images(image_tensors, batch_size: int, device: str, image_size: int):
+def display_images(image_tensors: list[torch.TensorType]):
     tensors = [
-        vutils.make_grid(image_tensor.to(device)[:image_size], normalize=True).cpu()
+        vutils.make_grid(
+            image_tensor.to(config.device)[: config.image_size], normalize=True
+        ).cpu()
         for image_tensor in image_tensors
     ]
     image_tensors_denormalized = torch.stack(tensors)
-    cols = int(np.ceil(np.sqrt(batch_size)))
-    rows = int(np.ceil(batch_size / cols))
+    cols = int(np.ceil(np.sqrt(config.batch_size)))
+    rows = int(np.ceil(config.batch_size / cols))
 
     _, axes = plt.subplots(rows, cols, figsize=(10, 10))
     axes = axes.flatten()
 
-    for i in range(batch_size):
+    for i in range(config.batch_size):
         axes[i].imshow(
             np.transpose(image_tensors_denormalized[i].cpu().numpy(), (1, 2, 0)),
             interpolation="nearest",
         )
         axes[i].axis("off")
 
-    for j in range(batch_size, len(axes)):
+    for j in range(config.batch_size, len(axes)):
         axes[j].axis("off")
 
     plt.tight_layout()
     plt.show()
 
 
-def display_images_v2(image_tensors, device: str, image_size: int):
+def display_images_v2(image_tensors: list[torch.TensorType], device: str):
     tensors = [
-        vutils.make_grid(image_tensor.to(device)[:image_size], normalize=True).cpu()
+        vutils.make_grid(
+            image_tensor.to(device)[: config.image_size], normalize=True
+        ).cpu()
         for image_tensor in image_tensors
     ]
     image_tensors_denormalized = torch.stack(tensors)
@@ -78,37 +82,18 @@ def get_device():
     return device
 
 
-def get_model(config, save_path: str, save_name: Optional[str] = None):
-    model = ViTGAN(**config)
+def get_model(save_name: Optional[str] = None):
+    model = ViTGAN()
     if save_name:
-        checkpoint_path = os.path.join(save_path, save_name)
+        checkpoint_path = os.path.join(config.ckpt_save_path, save_name)
         model.load(checkpoint_path)
         print(f"Loaded model from: {checkpoint_path}")
     return model
 
 
-def get_config(save_path: str):
-    
-    config_path = CONFIG_PATH_PLGRID
-
-    with open(config_path, "rb") as f:
-        config = json.load(f)
-
-    if not os.path.exists(save_path):
-        os.makedirs(save_path)
-
-    with open(os.path.join(save_path, config_path), "w", encoding="utf-8") as f:
-        json.dump(config, f, indent=4)
-
-    config["ckpt_save_path"] = save_path
-    writer = SummaryWriter(save_path)
-    config["logger"] = writer
-    return config
-
-
-def save_generator_test(config, model):
+def save_generator_test(model):
     noise = torch.randn(
-        config["img_size"], config["lattent_space_size"], device=config["device"]
+        config.image_size, config.lattent_space_size, device=config.device
     )
     fake = model.generate(noise)
     img = vutils.make_grid(fake, padding=2, normalize=True)
@@ -116,21 +101,18 @@ def save_generator_test(config, model):
     plt.axis("off")
     plt.title("Fake Images")
     plt.imshow(np.transpose(img.cpu(), (1, 2, 0)))
-    plt.savefig(os.path.join(config["ckpt_save_path"], "fake.png"))
+    plt.savefig(os.path.join(config.ckpt_save_path, "fake.png"))
 
 
-def get_dataloader(batch_size: int, image_size: int, train: bool, picked_dataset):
-    dataset = get_dataset(
-        image_size=image_size, train=train, picked_dataset=picked_dataset
-    )
+def get_dataloader(train: bool, picked_dataset):
+    dataset = get_dataset(train=train, picked_dataset=picked_dataset)
     return DataLoader(
         dataset,
-        batch_size=batch_size,
         shuffle=True,
     )
 
 
-def get_dataset(image_size: int, train: bool, picked_dataset):
+def get_dataset(train: bool, picked_dataset):
     picked_dataset_label = picked_dataset.url.split("/")[-1].split(".")[0]
     print(f"Using dataset: {picked_dataset_label}...")
     path = os.path.abspath(f"{os.environ['SCRATCH']}/data/{picked_dataset_label}")
@@ -141,8 +123,8 @@ def get_dataset(image_size: int, train: bool, picked_dataset):
         download=True,
         transform=transforms.Compose(
             [
-                transforms.Resize(image_size),
-                transforms.CenterCrop(image_size),
+                transforms.Resize(config.image_size),
+                transforms.CenterCrop(config.image_size),
                 transforms.ToTensor(),
                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
             ]
@@ -150,21 +132,9 @@ def get_dataset(image_size: int, train: bool, picked_dataset):
     )
 
 
-def get_save_path(start_time: datetime, model_is_loaded: bool):
-    return (
-        os.path.join(f"{os.environ['SCRATCH']}/output", "20240529-084154_MNIST")
-        if model_is_loaded
-        else os.path.join(f"{os.environ['SCRATCH']}/output", start_time)
-    )
-
-
 if __name__ == "__main__":
-    batch_size = 16
-    image_size = 32
-    dataloader = get_dataloader(
-        batch_size, image_size, train=True, picked_dataset=dset.CIFAR10
-    )
-    image_tensors, _ = next(iter(dataloader))
+    dataloader = get_dataloader(train=True, picked_dataset=dset.CIFAR10)
+    image_tensors_test, _ = next(iter(dataloader))
     # display_images(
     #     image_tensors=image_tensors,
     #     batch_size=batch_size,
@@ -172,7 +142,6 @@ if __name__ == "__main__":
     #     device=get_device(),
     # )
     display_images_v2(
-        image_tensors=image_tensors,
-        image_size=image_size,
+        image_tensors=image_tensors_test,
         device=get_device(),
     )

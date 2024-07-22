@@ -1,49 +1,41 @@
 import torch
 from torch import nn
 
+from src.config import MappingMLPParameters
+
+
+def pick_activation(activation: str):
+    match activation:
+        case "relu":
+            return torch.nn.ReLU()
+        case "gelu":
+            return torch.nn.GELU()
+        case "tanh":
+            return torch.nn.Tanh()
+        case "sigmoid":
+            return torch.nn.Sigmoid()
+        case _:
+            raise ValueError()
+
 
 class MLP(nn.Module):
     def __init__(
         self,
-        input_features,
-        output_features,
-        layers=None,
-        activation="gelu",
-        dropout_rate=0.0,
-        **kwargs
+        mlp_parameters: MappingMLPParameters,
     ):
-        """
-        Usual MLP module
-        :param input_features: number of input features
-        :param output_features: number of output features
-        :param layers: list of hidden layer dimensions
-        :param activation: activation function
-        :param dropout_rate: dropout rate
-        """
-        super(MLP, self).__init__()
-        self.layers = layers if layers is not None else []
+        super().__init__()
         self.model = nn.ModuleList(
             [
-                nn.Sequential(nn.Linear(lp, lnext), nn.Dropout(dropout_rate))
+                nn.Sequential(
+                    nn.Linear(lp, lnext), nn.Dropout(mlp_parameters.dropout_rate)
+                )
                 for lp, lnext in zip(
-                    [input_features] + self.layers, self.layers + [output_features]
+                    [mlp_parameters.input_features] + mlp_parameters.layers,
+                    mlp_parameters.layers + [mlp_parameters.output_features],
                 )
             ]
         )
-
-        self.activation = (
-            torch.nn.ReLU()
-            if activation == "relu"
-            else (
-                torch.nn.Tanh()
-                if activation == "tanh"
-                else (
-                    torch.nn.Sigmoid()
-                    if activation == "sigmoid"
-                    else torch.nn.GELU() if activation == "gelu" else ValueError
-                )
-            )
-        )
+        self.activation = pick_activation(mlp_parameters.activation)
 
     def forward(self, x):
         for i, layer in enumerate(self.model):

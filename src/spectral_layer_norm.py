@@ -1,14 +1,15 @@
 import torch
 from torch import nn
 
+from src.config import config
+
 
 class SLN(nn.Module):
     def __init__(self, number_of_features):
         """
-        Self modulated layer norm module implementation
-        :param n_feats: number of input features
+        Self modulated layer norm
         """
-        super(SLN, self).__init__()
+        super().__init__()
         self.layer_norm = nn.LayerNorm(
             number_of_features
         )  # we use this for the layer normalization

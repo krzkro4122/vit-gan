@@ -6,34 +6,36 @@ from torch import nn
 from torchmetrics.image.fid import FrechetInceptionDistance as FID
 
 from torchvision.utils import make_grid
+from torch.utils.tensorboard import SummaryWriter
+
+from src.config import config, SAVE_PATH
+
+
+def pick_criterion(criterion: str):
+    match criterion:
+        case "mse":
+            return nn.MSELoss(reduction="mean")
+        case "bce":
+            return nn.BCELoss(reduction="mean")
+        case _:
+            return criterion
 
 
 class PytorchGAN(nn.Module):
     def __init__(
         self,
-        image_size=32,
         criterion="bce",
-        logger=None,
         optimizer="adam",
-        device="cpu",
-        ckpt_save_path=None,
         tag="",
     ):
         super().__init__()
-        self.opt_type = optimizer if optimizer in ["sgd", "adam"] else ValueError
-        self.optG = None
-        self.optD = None
-        self.image_size = image_size
-        self.log = logger
-        self.device = device
-        self.ckpt_save_path = ckpt_save_path
-        self.state = {}
-        self.criterion = (
-            nn.MSELoss(reduction="mean")
-            if criterion == "mse"
-            else nn.BCELoss(reduction="mean") if criterion == "bce" else criterion
-        )
+        self.log = SummaryWriter(SAVE_PATH)
 
+        self.optimizer_type = optimizer if optimizer in ["sgd", "adam"] else ValueError
+        self.generator_optimizer = None
+        self.discriminator_optimizer = None
+        self.state = {}
+        self.criterion = pick_criterion(criterion=criterion)
         self.best_criterion = {
             "[TRAINING] Discriminator LOSS on real data": 10**10,
             "[TRAINING] Discriminator LOSS on fake data": 10**10,
@@ -54,7 +56,7 @@ class PytorchGAN(nn.Module):
         self.discriminator = None
 
         # useful stuff that can be needed for during fit
-        self.start_time = None
+        self.start_time = datetime.datetime.now()
         self.verbose = None
         self.number_of_epochs = None
         self.n = None
@@ -63,7 +65,7 @@ class PytorchGAN(nn.Module):
         self.save_images_freq = None
 
     def _train_epoch(self, dataloader):
-        fid = FID().to(self.device)
+        fid = FID().to(config.device)
         fid_batch = torch.randint(0, len(dataloader), (20, 1))
 
         epoch_disc_real_loss = 0
@@ -74,19 +76,21 @@ class PytorchGAN(nn.Module):
 
         for idx, batch in enumerate(dataloader):
             batch_x, batch_y = batch
-            batch_x = batch_x.to(self.device)
+            batch_x = batch_x.to(config.device)
             batch_size = batch_x.size(0)
 
             # Compute the loss the for the discriminator with real images
             self.discriminator.zero_grad()
-            label = torch.full((batch_size,), 1, dtype=torch.float, device=self.device)
+            label = torch.full(
+                (batch_size,), 1, dtype=torch.float, device=config.device
+            )
             real_disc_out = self.discriminator(batch_x).view(-1)
             disc_real_loss = self.criterion(real_disc_out, label)
             disc_real_loss.backward()
 
             # Compute the loss the for the discriminator with fake images
             noise_shape = [batch_size] + list(self.generator_input_shape)
-            noise = torch.randn(noise_shape, device=self.device)
+            noise = torch.randn(noise_shape, device=config.device)
             fake_images = self.generator(noise)
             label.fill_(0)  # changing the label
             fake_disc_out = self.discriminator(fake_images.detach()).view(
@@ -96,7 +100,7 @@ class PytorchGAN(nn.Module):
             disc_fake_loss.backward()
 
             disc_tot_loss = disc_real_loss + disc_fake_loss
-            self.optD.step()
+            self.discriminator_optimizer.step()
 
             # Training the generator
             self.generator.zero_grad()
@@ -106,15 +110,15 @@ class PytorchGAN(nn.Module):
             )  # this time we want to backprop on the generator
             gen_loss = self.criterion(out, label)
             gen_loss.backward()
-            self.optG.step()
+            self.generator_optimizer.step()
 
             if idx in fid_batch:
                 with torch.no_grad():
                     fake_images_8b = (
-                        ((fake_images + 1) * 255 / 2).to(torch.uint8).to(self.device)
+                        ((fake_images + 1) * 255 / 2).to(torch.uint8).to(config.device)
                     )
                     batch_x_8b = (
-                        ((batch_x + 1) * 255 / 2).to(torch.uint8).to(self.device)
+                        ((batch_x + 1) * 255 / 2).to(torch.uint8).to(config.device)
                     )
                     fid.update(
                         fake_images_8b.expand(
@@ -162,18 +166,18 @@ class PytorchGAN(nn.Module):
         epoch_gen_loss = 0
         for idx, batch in enumerate(dataloader):
             batch_x, batch_y = batch
-            batch_x = batch_x.to(self.device)
+            batch_x = batch_x.to(config.device)
             batch_size = batch_x.size(0)
 
             # Compute the loss the for the discriminator with real images
             self.discriminator.zero_grad()
-            label = torch.full(batch_size, 1, dtype=torch.float, device=self.device)
+            label = torch.full(batch_size, 1, dtype=torch.float, device=config.device)
             real_disc_out = self.discriminator(batch_x).view(-1)
             disc_real_loss = self.criterion(real_disc_out, label)
 
             # Compute the loss the for the discriminator with fake images
             noise_shape = [batch_size] + list(self.generator_input_shape)
-            noise = torch.randn(noise_shape, device=self.device)
+            noise = torch.randn(noise_shape, device=config.device)
             fake_images = self.generator(noise)
             label.fill_(-1)  # changing the label
             fake_disc_out = self.discriminator(fake_images.detach()).view(
@@ -224,29 +228,26 @@ class PytorchGAN(nn.Module):
             self.generator_input_shape is not None
         ), "Could not find the generator input shape, please specify this attribute before fitting the model"
 
-        if self.opt_type == "sgd":
-            self.optG = torch.optim.SGD(
+        if self.optimizer_type == "sgd":
+            self.generator_optimizer = torch.optim.SGD(
                 params=self.generator.parameters(), lr=generator_learning_rate
             )
-            self.optD = torch.optim.SGD(
+            self.discriminator_optimizer = torch.optim.SGD(
                 params=self.discriminator.parameters(), lr=discriminator_learning_rate
             )
-        elif self.opt_type == "adam":
-            self.optG = torch.optim.Adam(
+        elif self.optimizer_type == "adam":
+            self.generator_optimizer = torch.optim.Adam(
                 params=self.generator.parameters(),
                 lr=generator_learning_rate,
                 betas=betas,
             )
-            self.optD = torch.optim.Adam(
+            self.discriminator_optimizer = torch.optim.Adam(
                 params=self.discriminator.parameters(),
                 lr=discriminator_learning_rate,
                 betas=betas,
             )
         else:
             raise ValueError("Unknown optimizer")
-
-        start_time = datetime.datetime.now()
-        self.start_time = start_time
 
         start_epoch = 0
         self.verbose = verbose
@@ -255,9 +256,9 @@ class PytorchGAN(nn.Module):
             state = torch.load(ckpt)
             start_epoch = state["epoch"]
             self.load_state_dict(state["state_dict"])
-            for g in self.optD.param_groups:
+            for g in self.discriminator_optimizer.param_groups:
                 g["lr"] = state["lr"]["disc_lr"]
-            for g in self.optG.param_groups:
+            for g in self.generator_optimizer.param_groups:
                 g["lr"] = state["lr"]["gen_lr"]
 
         self.number_of_epochs = number_of_epochs
@@ -325,12 +326,13 @@ class PytorchGAN(nn.Module):
 
             if save_images_frequency is not None and n % save_images_frequency == 0:
                 noise = torch.randn(
-                    self.image_size, self.lattent_space_size, device=self.device
+                    config.image_size, config.lattent_space_size, device=config.device
                 )
                 image_tensors = self.generate(noise)
                 tensors = [
                     make_grid(
-                        image_tensor.to(self.device)[: self.image_size], normalize=True
+                        image_tensor.to(config.device)[: config.image_size],
+                        normalize=True,
                     ).cpu()
                     for image_tensor in image_tensors
                 ]
@@ -339,7 +341,7 @@ class PytorchGAN(nn.Module):
                 self.log.add_image("images", image_tensors_grid, n)
 
             if save_model_freq is not None and n % save_model_freq == 0:
-                assert self.ckpt_save_path is not None, "Need a path to save models"
+                assert config.ckpt_save_path is not None, "Need a path to save models"
                 self.save(
                     {
                         "gen_lr": generator_learning_rate,
@@ -356,13 +358,13 @@ class PytorchGAN(nn.Module):
         self.state["lr"] = lr
         self.state["epoch"] = n
         self.state["state_dict"] = self.state_dict()
-        if not os.path.exists(self.ckpt_save_path):
-            os.mkdir(self.ckpt_save_path)
+        if not os.path.exists(config.ckpt_save_path):
+            os.mkdir(config.ckpt_save_path)
         torch.save(
             self.state,
             os.path.join(
-                self.ckpt_save_path,
-                f"ckpt_{self.tag}{self.start_time.strftime('%Y%m%d-%H%M%S')}_epoch{n}.ckpt",
+                config.ckpt_save_path,
+                f"ckpt_{self.start_time.strftime('%Y%m%d-%H%M%S')}_epoch{n}.ckpt",
             ),
         )
 

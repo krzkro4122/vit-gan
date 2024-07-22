@@ -1,64 +1,20 @@
-from discriminatorCNN import Discriminator
-from generator import Generator
-from gan import PytorchGAN
+from src.config import config
+from src.discriminatorCNN import Discriminator
+from src.generator import Generator
+from src.gan import PytorchGAN
 
 
 class ViTGAN(PytorchGAN):
-    def __init__(
-        self,
-        image_size,
-        number_of_channels,
-        lattent_space_size,
-        generator_params=None,
-        discriminator_params=None,
-        criterion="bce",
-        logger=None,
-        optimizer="adam",
-        device="cpu",
-        ckpt_save_path=None,
-        tag="",
-        **kwargs
-    ):
-        super().__init__(
-            criterion=criterion,
-            logger=logger,
-            optimizer=optimizer,
-            device=device,
-            ckpt_save_path=ckpt_save_path,
-            tag=tag,
-        )
+    def __init__(self):
+        super().__init__()
 
-        self.image_size = image_size
-        self.number_of_channels = number_of_channels
-        self.lattent_space_size = lattent_space_size
-
-        self.generator_params = {} if generator_params is None else generator_params
-        self.discriminator_params = (
-            {} if discriminator_params is None else discriminator_params
-        )
-
-        self.generator_params = generator_params
-        self.discriminator_params = discriminator_params
-
-        (
-            self.generator_params["image_size"],
-            self.generator_params["number_of_channels"],
-            self.generator_params["lattent_size"],
-        ) = (self.image_size, self.number_of_channels, self.lattent_space_size)
-        (
-            self.discriminator_params["image_size"],
-            self.discriminator_params["number_of_channels"],
-            self.discriminator_params["output_size"],
-        ) = (self.image_size, self.number_of_channels, 1)
-
-        # Necessary attributes for PytorchGAN
-        self.generator = Generator(**self.generator_params)
+        self.generator = Generator()
         self.discriminator = Discriminator()
-        self.generator_input_shape = (self.lattent_space_size,)
+        self.generator_input_shape = (config.lattent_space_size,)
 
-        self.generator.to(self.device)
-        self.discriminator.to(self.device)
-        self.to(self.device)
+        self.generator.to(config.device)
+        self.discriminator.to(config.device)
+        self.to(config.device)
 
     def forward(self, x):
         pass
