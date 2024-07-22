@@ -215,7 +215,7 @@ class PytorchGAN(nn.Module):
         save_criterion="Discriminator FID",
         ckpt=None,
         save_model_freq=50,
-        betas=(0.0, 0.99),
+        betas=(0.5, 0.999),
         **kwargs,
     ):
         assert (
@@ -299,9 +299,9 @@ class PytorchGAN(nn.Module):
                 "[VALIDATION] Generator LOSS": v_gen_loss,
                 "Discriminator FID": discriminator_fid,
             }
-            if self.log:
+            if self.logger:
                 for k, v in epoch_result.items():
-                    self.log.add_scalar(k, v, n)
+                    self.logger.add_scalar(k, v, n)
 
             if epoch_result[save_criterion] <= self.best_criterion[save_criterion]:
                 self.best_criterion = epoch_result
@@ -338,7 +338,7 @@ class PytorchGAN(nn.Module):
                 ]
                 image_tensors_denormalized = torch.stack(tensors)
                 image_tensors_grid = make_grid(image_tensors_denormalized)
-                self.log.add_image("images", image_tensors_grid, n)
+                self.logger.add_image("images", image_tensors_grid, n)
 
             if save_model_freq is not None and n % save_model_freq == 0:
                 assert config.ckpt_save_path is not None, "Need a path to save models"
