@@ -34,8 +34,6 @@ if __name__ == "__main__":
         model.fit(
             train_dataloader,
             number_of_epochs=1000,
-            generator_learning_rate=2e-5,
-            discriminator_learning_rate=2e-5,
             save_images_frequency=1,
         )
     except KeyboardInterrupt:

@@ -46,6 +46,7 @@ class GeneratorParameters(BaseModel):
     feature_hidden_size: int = 384
     number_of_transformer_layers: int = 4
     output_hidden_dimension: int = 768
+    learning_rate: float = 2e-5
 
 
 class DiscriminatorParameters(BaseModel):
@@ -53,10 +54,12 @@ class DiscriminatorParameters(BaseModel):
     encoder_params: EncoderParameters = EncoderParameters()
     transformer_params: TransformerParameters = TransformerParameters()
     mapping_mlp_params: MappingMLPParameters = MappingMLPParameters()
+    learning_rate: float = 2e-5
 
 
 class ViTGANParameters(BaseModel):
     seed: int = 0
+    betas: tuple[float] = (0.5, 0.999)
     number_of_channels: int = 3
     image_size: int = 32
     batch_size: int = 128

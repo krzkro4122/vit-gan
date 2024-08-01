@@ -6,10 +6,7 @@ from src.gan import GAN
 
 class ViTGAN(GAN):
     def __init__(self):
-        super().__init__()
-
-        self.generator = Generator()
-        self.discriminator = Discriminator()
+        super().__init__(generator=Generator(), discriminator=Discriminator())
         self.generator_input_shape = (config.lattent_space_size,)
 
         self.generator.to(config.device)

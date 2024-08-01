@@ -3,7 +3,6 @@ import os
 
 import torch
 from torch import nn
-from typing import Any, Callable
 from torchmetrics.image.fid import FrechetInceptionDistance as FID
 
 from torchvision.utils import make_grid
@@ -19,12 +18,14 @@ def pick_criterion(criterion: str):
         case "bce":
             return nn.BCELoss(reduction="mean")
         case _:
-            return criterion
+            return ValueError("Unknown criterion")
 
 
 class GAN(nn.Module):
     def __init__(
         self,
+        generator: nn.Module | None,
+        discriminator: nn.Module | None,
         criterion="bce",
         optimizer="adam",
         tag="",
@@ -32,9 +33,13 @@ class GAN(nn.Module):
         super().__init__()
         self.log = SummaryWriter(SAVE_PATH)
 
+        self.generator = generator
+        self.discriminator = discriminator
+
         self.optimizer_type = optimizer if optimizer in ["sgd", "adam"] else ValueError
-        self.generator_optimizer = None
-        self.discriminator_optimizer = None
+        self.generator_optimizer, self.discriminator_optimizer = self._pick_optimizer(
+            optimizer=optimizer,
+        )
         self.state = {}
         self.criterion = pick_criterion(criterion=criterion)
         self.best_criterion = {
@@ -53,8 +58,6 @@ class GAN(nn.Module):
 
         # /!\ the overriding class must implement a discriminator and a generator extending nn.Module
         self.generator_input_shape = None
-        self.generator: Any | Callable | None = None
-        self.discriminator: Any | Callable | None = None
 
         # useful stuff that can be needed for during fit
         self.start_time = datetime.datetime.now()
@@ -160,6 +163,41 @@ class GAN(nn.Module):
             fid_value / len(dataloader),
         )
 
+    def _pick_optimizer(
+        self,
+        optimizer: str,
+    ):
+        generator_learning_rate = config.discriminator_params.learning_rate
+        discriminator_learning_rate = config.generator_params.learning_rate
+        match optimizer:
+            case "sgd":
+                return (
+                    torch.optim.SGD(
+                        params=self.generator.parameters(), lr=generator_learning_rate
+                    ),
+                    torch.optim.SGD(
+                        params=self.discriminator.parameters(),
+                        lr=discriminator_learning_rate,
+                    ),
+                )
+
+            case "adam":
+                betas = config.betas
+                return (
+                    torch.optim.Adam(
+                        params=self.generator.parameters(),
+                        lr=generator_learning_rate,
+                        betas=betas,
+                    ),
+                    torch.optim.Adam(
+                        params=self.discriminator.parameters(),
+                        lr=discriminator_learning_rate,
+                        betas=betas,
+                    ),
+                )
+            case _:
+                raise ValueError("Unknown optimizer")
+
     def _validate(self, dataloader):
         epoch_disc_real_loss = 0
         epoch_disc_fake_loss = 0
@@ -208,47 +246,14 @@ class GAN(nn.Module):
         self,
         dataloader,
         number_of_epochs,
-        generator_learning_rate,
-        discriminator_learning_rate,
         validation_data=None,
         verbose=1,
         save_images_frequency=50,
         save_criterion="Discriminator FID",
         ckpt=None,
         save_model_freq=50,
-        betas=(0.5, 0.999),
         **kwargs,
     ):
-        assert (
-            self.generator is not None
-        ), "Model does not seem to have a generator, assign the generator to the self.generator attribute"
-        assert (
-            self.discriminator is not None
-        ), "Model does not seem to have a discriminator, assign the discriminator to the self.discriminator attribute"
-        assert (
-            self.generator_input_shape is not None
-        ), "Could not find the generator input shape, please specify this attribute before fitting the model"
-
-        if self.optimizer_type == "sgd":
-            self.generator_optimizer = torch.optim.SGD(
-                params=self.generator.parameters(), lr=generator_learning_rate
-            )
-            self.discriminator_optimizer = torch.optim.SGD(
-                params=self.discriminator.parameters(), lr=discriminator_learning_rate
-            )
-        elif self.optimizer_type == "adam":
-            self.generator_optimizer = torch.optim.Adam(
-                params=self.generator.parameters(),
-                lr=generator_learning_rate,
-                betas=betas,
-            )
-            self.discriminator_optimizer = torch.optim.Adam(
-                params=self.discriminator.parameters(),
-                lr=discriminator_learning_rate,
-                betas=betas,
-            )
-        else:
-            raise ValueError("Unknown optimizer")
 
         start_epoch = 0
         self.verbose = verbose
