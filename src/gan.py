@@ -21,7 +21,7 @@ def pick_criterion(criterion: str):
             return criterion
 
 
-class PytorchGAN(nn.Module):
+class GAN(nn.Module):
     def __init__(
         self,
         criterion="bce",

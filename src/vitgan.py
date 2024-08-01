@@ -1,10 +1,10 @@
 from src.config import config
 from src.discriminatorCNN import Discriminator
 from src.generator import Generator
-from src.gan import PytorchGAN
+from src.gan import GAN
 
 
-class ViTGAN(PytorchGAN):
+class ViTGAN(GAN):
     def __init__(self):
         super().__init__()
 
