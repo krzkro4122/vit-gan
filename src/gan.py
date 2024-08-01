@@ -3,6 +3,7 @@ import os
 
 import torch
 from torch import nn
+from typing import Any
 from torchmetrics.image.fid import FrechetInceptionDistance as FID
 
 from torchvision.utils import make_grid
@@ -52,8 +53,8 @@ class GAN(nn.Module):
 
         # /!\ the overriding class must implement a discriminator and a generator extending nn.Module
         self.generator_input_shape = None
-        self.generator = None
-        self.discriminator = None
+        self.generator: Any | None = None
+        self.discriminator: Any | None = None
 
         # useful stuff that can be needed for during fit
         self.start_time = datetime.datetime.now()
