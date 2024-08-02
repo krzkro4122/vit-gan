@@ -59,7 +59,7 @@ class DiscriminatorParameters(BaseModel):
 
 class ViTGANParameters(BaseModel):
     seed: int = 0
-    betas: tuple[float] = (0.5, 0.999)
+    betas: tuple[float, float] = (0.5, 0.999)
     number_of_channels: int = 3
     image_size: int = 32
     batch_size: int = 128
