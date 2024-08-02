@@ -1,6 +1,6 @@
 import os
 import datetime
-from typing import Any
+from typing import Any, Optional
 from pydantic import BaseModel
 
 
@@ -27,8 +27,8 @@ class MappingMLPParameters(BaseModel):
     layers: list[Any] = []
     activation: str = "gelu"
     dropout_rate: float = 0.0
-    input_features: int | None = None
-    output_features: int | None = None
+    input_features: Optional[int] = None
+    output_features: Optional[int] = None
 
 
 class TransformerParameters(BaseModel):
@@ -37,9 +37,9 @@ class TransformerParameters(BaseModel):
     mlp_layers: list[Any] = []
     mlp_activation: str = "relu"
     mlp_dropout: float = 0.2
-    input_features: int | None = None
-    spectral_scaling: bool | None = None
-    lp: int | None = None
+    input_features: Optional[int] = None
+    spectral_scaling: Optional[bool] = None
+    lp: Optional[int] = None
 
 
 class GeneratorParameters(BaseModel):
