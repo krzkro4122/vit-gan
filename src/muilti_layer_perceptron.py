@@ -5,17 +5,14 @@ from src.config import MappingMLPParameters
 
 
 def pick_activation(activation: str):
-    match activation:
-        case "relu":
-            return torch.nn.ReLU()
-        case "gelu":
-            return torch.nn.GELU()
-        case "tanh":
-            return torch.nn.Tanh()
-        case "sigmoid":
-            return torch.nn.Sigmoid()
-        case _:
-            raise ValueError()
+    if activation == "relu":
+        return torch.nn.ReLU()
+    if activation == "gelu":
+        return torch.nn.GELU()
+    if activation == "tanh":
+        return torch.nn.Tanh()
+    else:
+        return torch.nn.Sigmoid()
 
 
 class MLP(nn.Module):

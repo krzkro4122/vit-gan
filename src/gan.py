@@ -14,11 +14,10 @@ from src.config import config, SAVE_PATH
 
 
 def pick_criterion(criterion: str):
-    match criterion:
-        case "mse":
-            return nn.MSELoss(reduction="mean")
-        case _:
-            return nn.BCELoss(reduction="mean")
+    if criterion == "mse":
+        return nn.MSELoss(reduction="mean")
+    else:
+        return nn.BCELoss(reduction="mean")
 
 
 class GAN(nn.Module):
@@ -305,32 +304,28 @@ class GAN(nn.Module):
     ):
         generator_learning_rate = config.discriminator_params.learning_rate
         discriminator_learning_rate = config.generator_params.learning_rate
-        match optimizer:
-            case "sgd":
-                return (
-                    SGD(params=self.generator.parameters(), lr=generator_learning_rate),
-                    SGD(
-                        params=self.discriminator.parameters(),
-                        lr=discriminator_learning_rate,
-                    ),
-                )
-
-            case "adam":
-                betas = config.betas
-                return (
-                    Adam(
-                        params=self.generator.parameters(),
-                        lr=generator_learning_rate,
-                        betas=betas,
-                    ),
-                    Adam(
-                        params=self.discriminator.parameters(),
-                        lr=discriminator_learning_rate,
-                        betas=betas,
-                    ),
-                )
-            case _:
-                raise ValueError("Unknown optimizer")
+        if optimizer == "sgd":
+            return (
+                SGD(params=self.generator.parameters(), lr=generator_learning_rate),
+                SGD(
+                    params=self.discriminator.parameters(),
+                    lr=discriminator_learning_rate,
+                ),
+            )
+        else:
+            betas = config.betas
+            return (
+                Adam(
+                    params=self.generator.parameters(),
+                    lr=generator_learning_rate,
+                    betas=betas,
+                ),
+                Adam(
+                    params=self.discriminator.parameters(),
+                    lr=discriminator_learning_rate,
+                    betas=betas,
+                ),
+            )
 
     def _validate(self, dataloader):
         epoch_disc_real_loss = 0
