@@ -129,9 +129,9 @@ class GAN(nn.Module):
                 "[VALIDATION] Generator LOSS": v_gen_loss,
                 "Discriminator FID": discriminator_fid,
             }
-            if self.logger:
+            if self.log:
                 for k, v in epoch_result.items():
-                    self.logger.add_scalar(k, v, n)
+                    self.log.add_scalar(k, v, n)
 
             if epoch_result[save_criterion] <= self.best_criterion[save_criterion]:
                 self.best_criterion = epoch_result
@@ -160,7 +160,7 @@ class GAN(nn.Module):
                 ]
                 image_tensors_denormalized = torch.stack(tensors)
                 image_tensors_grid = make_grid(image_tensors_denormalized)
-                self.logger.add_image("images", image_tensors_grid, n)
+                self.log.add_image("images", image_tensors_grid, n)
 
             if save_model_freq is not None and n % save_model_freq == 0:
                 assert config.ckpt_save_path is not None, "Need a path to save models"
