@@ -1,7 +1,5 @@
 import datetime
-from itertools import combinations
 import os
-import sys
 from typing import Union
 import torch
 import rich
@@ -17,9 +15,12 @@ from pytorch_fid.inception import InceptionV3
 import src.v2.modules as modules
 
 START_TIME = datetime.datetime.now()
-SAVE_DIR = os.path.join(
-    f"{os.environ['SCRATCH']}/output", START_TIME.strftime("%Y%m%d-%H%M%S")
-)
+BASE_DIR = os.getenv("SCRATCH", "~")
+OUTPUT_DIR = f"{BASE_DIR}/output"
+SAVE_DIR = os.path.join(OUTPUT_DIR, START_TIME.strftime("%Y%m%d-%H%M%S"))
+
+if not os.path.exists(OUTPUT_DIR):
+    os.mkdir(OUTPUT_DIR)
 if not os.path.exists(SAVE_DIR):
     os.mkdir(SAVE_DIR)
 
@@ -74,19 +75,29 @@ def run():
     epochs = 100
     learning_rate = 2e-5
     betas = (0.5, 0.999)
-    noise_shape = img_size * 2, in_chans, img_size, img_size
+    noise_shape = 1, in_chans, img_size, img_size
 
     def construct_noise():
         noise = torch.randn(
             noise_shape, device=device, generator=torch.Generator(device=device)
         )
-        truth_map = [
-            torch.any(torch.eq(tensor1, tensor2)).cpu().item()
-            for tensor1, tensor2 in combinations(noise, 2)
-        ]
-        if any(truth_map):
-            log("All generated noise is THE SAME!")
-            sys.exit(1)
+        for _ in range(img_size * 2):
+            new_noise = torch.randn(
+                device=device, generator=torch.Generator(device=device)
+            )
+            noise = torch.cat((noise, new_noise.unsqueeze(2)), dim=1)
+        # truth_map = from_numpy(
+        #     np.fromiter(
+        #         (
+        #             torch.any(torch.eq(tensor1, tensor2)).item()
+        #             for tensor1, tensor2 in combinations(noise, 2)
+        #         ),
+        #         Tensor,
+        #     )
+        # )
+        # if torch.any(truth_map).cpu().item():
+        #     log("Noise collisions detected!")
+        #     sys.exit(1)
         return noise
 
     def save_images(label: Union[str, int], model: modules.ViTGAN):
@@ -132,7 +143,7 @@ def run():
     fid = FrechetInceptionDistance(feature=2048).to(device)
 
     try:
-        log("Starting training!")
+        log(f"Starting training at: {str(datetime.datetime.now())}")
         # Training Loop
         for epoch in range(epochs):
             save_images(model=vit_gan, label=epoch)
