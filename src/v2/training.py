@@ -1,6 +1,6 @@
 import datetime
 import os
-from typing import Optional
+from typing import Union
 import torch
 import rich
 import numpy as np
@@ -80,7 +80,7 @@ def run():
         assert len(set(noise)) != 1, "All generated noise is THE SAME!"
         return noise
 
-    def save_images(label: Optional[str, int], model: modules.ViTGAN):
+    def save_images(label: Union[str, int], model: modules.ViTGAN):
         noise = construct_noise().to(device)
         sample_images = model.generator(noise).detach().cpu()
         save_path = os.path.join(SAVE_DIR, f"generated_images_epoch_{label}.png")
