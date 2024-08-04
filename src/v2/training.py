@@ -69,6 +69,15 @@ def run():
     dropout_rate = 0.0
     batch_size = 64
     epochs = 100
+    learning_rate = 0.0002
+    betas = (0.5, 0.999)
+
+    def save_images(label: str | int, model: modules.ViTGAN):
+        noise = torch.randn(64, in_chans, img_size, img_size).to(device)
+        sample_images = model.generator(noise).detach().cpu()
+        save_path = os.path.join(SAVE_DIR, f"generated_images_epoch_{label}.png")
+        vutils.save_image(sample_images, save_path, nrow=8, normalize=True)
+        log(f"Saved sample images at epoch {label} to {save_path}")
 
     # Data loaders
     transform = transforms.Compose(
@@ -98,8 +107,8 @@ def run():
         mlp_ratio,
         dropout_rate,
     ).to(device)
-    gen_opt = Adam(vit_gan.generator.parameters(), lr=0.0002, betas=(0.5, 0.999))
-    disc_opt = Adam(vit_gan.discriminator.parameters(), lr=0.0002, betas=(0.5, 0.999))
+    gen_opt = Adam(vit_gan.generator.parameters(), lr=learning_rate, betas=betas)
+    disc_opt = Adam(vit_gan.discriminator.parameters(), lr=learning_rate, betas=betas)
 
     fid = FrechetInceptionDistance(feature=2048).to(device)
 
@@ -107,6 +116,7 @@ def run():
         log("Starting training!")
         # Training Loop
         for epoch in range(epochs):
+            save_images(model=vit_gan, label=epoch)
             for i, (real_images, _) in enumerate(train_loader):
                 real_images_normalized = (
                     real_images.to(device).float() / 255.0 * 2 - 1
@@ -130,6 +140,11 @@ def run():
 
                 # Train Generator
                 vit_gan.generator.zero_grad()
+                noise = torch.randn(
+                    real_images_normalized.size(0), in_chans, img_size, img_size
+                ).to(
+                    device
+                )  # Generate new noise for generator training
                 fake_images = vit_gan.generator(noise)
                 fake_output = vit_gan.discriminator(fake_images)
                 gen_loss = F.binary_cross_entropy_with_logits(
@@ -139,6 +154,11 @@ def run():
                 gen_opt.step()
 
                 if i % 100 == 0:
+                    noise = torch.randn(
+                        real_images_normalized.size(0), in_chans, img_size, img_size
+                    ).to(
+                        device
+                    )  # Generate new noise for evaluation
                     fake_images = vit_gan.generator(noise).detach()
                     real_images_uint8 = convert_to_uint8(real_images_normalized).to(
                         device
@@ -152,15 +172,6 @@ def run():
                     )
                     fid.reset()
 
-                # Save sample generated images every 10th epoch
-                if (epoch + 1) % 10 == 0:
-                    sample_images = vit_gan.generator(noise).detach().cpu()
-                    save_path = os.path.join(
-                        SAVE_DIR, f"generated_images_epoch_{epoch+1}.png"
-                    )
-                    vutils.save_image(sample_images, save_path, nrow=5, normalize=True)
-                    log(f"Saved sample images at epoch {epoch+1} to {save_path}")
-
     except KeyboardInterrupt as ke:
         log(f"{ke} raised!")
     finally:
@@ -170,3 +181,4 @@ def run():
             f"Run took {str(datetime.datetime.now() - START_TIME)}. Saving the model to: {model_path}"
         )
         torch.save(vit_gan.state_dict(), model_path)
+        save_images("end", vit_gan)
