@@ -91,11 +91,13 @@ def run():
         return torch.cat(noise, 0)
 
     def save_images(label: Union[str, int], model: modules.ViTGAN):
-        noise = construct_noise().to(device)
-        noises = [noise.detach().cpu()[i] for i in range(img_size * 2)]
-        sample_images = [
-            model.generator(noise).detach().cpu()[0] for _ in range(img_size * 2)
-        ]
+        noises = []
+        sample_images = []
+        for i in range(img_size * 2):
+            noise = construct_noise().to(device)
+            noises.append(noise.detach().cpu()[i])
+            sample_images.append(model.generator(noise).detach().cpu()[i])
+
         images_save_path = os.path.join(SAVE_DIR, f"generated_images_epoch_{label}.png")
         noise_save_path = os.path.join(SAVE_DIR, f"noise__{label}.png")
         vutils.save_image(sample_images, images_save_path, nrow=8, normalize=True)
