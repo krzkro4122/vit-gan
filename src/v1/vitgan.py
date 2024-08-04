@@ -1,7 +1,7 @@
-from src.config import config
-from src.discriminatorCNN import Discriminator
-from src.generator import Generator
-from src.gan import GAN
+from src.v1.config import config
+from src.v1.discriminatorViT import Discriminator
+from src.v1.generator import Generator
+from src.v1.gan import GAN
 
 
 class ViTGAN(GAN):

@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from src.config import MappingMLPParameters
+from src.v1.config import MappingMLPParameters
 
 
 def pick_activation(activation: str):

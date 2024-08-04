@@ -5,8 +5,8 @@ from torch.utils.data import DataLoader
 from torchvision.utils import make_grid
 import torchvision.transforms as transforms
 import torchvision.datasets as dset
-from src.config import config
-from src.vitgan import ViTGAN
+from src.v1.config import config
+from src.v1.vitgan import ViTGAN
 
 import matplotlib.pyplot as plt
 import numpy as np

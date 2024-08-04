@@ -2,8 +2,8 @@ import torch
 import logging
 import torchvision.datasets as dset
 
-from src.config import config
-from src.utils import (
+from src.v1.config import config
+from src.v1.utils import (
     get_dataloader,
     get_model,
     save_generator_test,

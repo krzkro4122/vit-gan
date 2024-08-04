@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from src.config import TransformerParameters
+from src.v1.config import TransformerParameters
 
 
 class Attention(nn.Module):
@@ -20,7 +20,9 @@ class Attention(nn.Module):
             1,
             2,
         ], f"Unsupported norm for attention: lp={transformer_parameters.lp} but should be 1 or 2"
-        self.attention_func = self._l1att if transformer_parameters.lp == 1 else self._l2att
+        self.attention_func = (
+            self._l1att if transformer_parameters.lp == 1 else self._l2att
+        )
 
         self.q = nn.Linear(
             transformer_parameters.input_features, self.output_features, bias=False

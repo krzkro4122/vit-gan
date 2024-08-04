@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from src.config import EncoderParameters, config
+from src.v1.config import EncoderParameters, config
 
 
 class PatchEncoder(nn.Module):

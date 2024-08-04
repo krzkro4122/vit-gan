@@ -1,9 +1,9 @@
 from torch import nn
 
-from src.config import MappingMLPParameters, TransformerParameters
-from src.attention import MultiHeadSelfAttention
-from src.spectral_layer_norm import SLN
-from src.muilti_layer_perceptron import MLP
+from src.v1.config import MappingMLPParameters, TransformerParameters
+from src.v1.attention import MultiHeadSelfAttention
+from src.v1.spectral_layer_norm import SLN
+from src.v1.muilti_layer_perceptron import MLP
 
 
 class Transformer(nn.Module):
@@ -56,8 +56,12 @@ class TransformerSLN(nn.Module):
             // transformer_parameters.number_of_heads
         )
 
-        self.layer_norm_1 = SLN(number_of_features=transformer_parameters.input_features)
-        self.layer_norm_2 = SLN(number_of_features=transformer_parameters.input_features)
+        self.layer_norm_1 = SLN(
+            number_of_features=transformer_parameters.input_features
+        )
+        self.layer_norm_2 = SLN(
+            number_of_features=transformer_parameters.input_features
+        )
 
         self.attention_dropout = nn.Dropout(
             transformer_parameters.attention_dropout_rate

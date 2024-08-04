@@ -1,16 +1,16 @@
 import torch
 from torch import nn
 
-from src.config import (
+from src.v1.config import (
     EncoderParameters,
     MappingMLPParameters,
     TransformerParameters,
     config,
 )
-from src.patch_encoder import PatchEncoder
-from src.transformer import Transformer
-from src.muilti_layer_perceptron import MLP
-from src.model_utils import count_params
+from src.v1.patch_encoder import PatchEncoder
+from src.v1.transformer import Transformer
+from src.v1.muilti_layer_perceptron import MLP
+from src.v1.model_utils import count_params
 
 
 class Discriminator(nn.Module):

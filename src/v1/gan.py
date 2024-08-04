@@ -10,7 +10,7 @@ from torchmetrics.image.fid import FrechetInceptionDistance as FID
 from torchvision.utils import make_grid
 from torch.utils.tensorboard import SummaryWriter
 
-from src.config import config, SAVE_PATH
+from src.v1.config import config, SAVE_PATH
 
 
 def pick_criterion(criterion: str):

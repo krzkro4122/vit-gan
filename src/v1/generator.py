@@ -1,12 +1,12 @@
 import torch
 from torch import nn
 
-from src.config import MappingMLPParameters, TransformerParameters, config
-from src.muilti_layer_perceptron import MLP
-from src.transformer import TransformerSLN
-from src.spectral_layer_norm import SLN
-from src.siren import SIREN, SIRENParameters
-from src.model_utils import count_params
+from src.v1.config import MappingMLPParameters, TransformerParameters, config
+from src.v1.muilti_layer_perceptron import MLP
+from src.v1.transformer import TransformerSLN
+from src.v1.spectral_layer_norm import SLN
+from src.v1.siren import SIREN, SIRENParameters
+from src.v1.model_utils import count_params
 
 
 class Generator(nn.Module):
@@ -16,7 +16,8 @@ class Generator(nn.Module):
         self.mapping_mlp = MLP(
             mlp_parameters=MappingMLPParameters(
                 input_features=config.lattent_space_size,
-                output_features=config.image_size * config.generator_params.feature_hidden_size,
+                output_features=config.image_size
+                * config.generator_params.feature_hidden_size,
             )
         )
 
@@ -32,9 +33,7 @@ class Generator(nn.Module):
         self.transformer_layers = nn.ModuleList(
             [
                 TransformerSLN(transformer_parameters=transformer_parameters)
-                for _ in range(
-                    config.generator_params.number_of_transformer_layers
-                )
+                for _ in range(config.generator_params.number_of_transformer_layers)
             ]
         )
         self.sln = SLN(number_of_features=config.generator_params.feature_hidden_size)

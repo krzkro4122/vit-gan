@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from src.config import config
+from src.v1.config import config
 
 
 class SLN(nn.Module):

@@ -61,6 +61,7 @@ pydantic
 pydantic_core
 Pygments
 pyparsing
+pytorch-fid
 python-dateutil
 pyzmq
 requests
