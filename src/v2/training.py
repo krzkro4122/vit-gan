@@ -1,5 +1,7 @@
 import datetime
+from itertools import combinations
 import os
+import sys
 from typing import Union
 import torch
 import rich
@@ -70,21 +72,30 @@ def run():
     dropout_rate = 0.0
     batch_size = 64
     epochs = 100
-    learning_rate = 0.0002
+    learning_rate = 2e-5
     betas = (0.5, 0.999)
-    # noise_shape = img_size * 2, in_chans, img_size, img_size
     noise_shape = img_size * 2, in_chans, img_size, img_size
 
     def construct_noise():
-        noise = torch.randn(noise_shape).to(device)
-        assert len(set(noise)) != 1, "All generated noise is THE SAME!"
+        noise = torch.randn(
+            noise_shape, device=device, generator=torch.Generator(device=device)
+        )
+        truth_map = [
+            torch.any(torch.eq(tensor1, tensor2)).cpu().item()
+            for tensor1, tensor2 in combinations(noise, 2)
+        ]
+        if any(truth_map):
+            log("All generated noise is THE SAME!")
+            sys.exit(1)
         return noise
 
     def save_images(label: Union[str, int], model: modules.ViTGAN):
         noise = construct_noise().to(device)
-        sample_images = model.generator(noise).detach().cpu()
+        sample_images = [
+            model.generator(noise).detach().cpu()[0] for _ in range(img_size * 2)
+        ]
         save_path = os.path.join(SAVE_DIR, f"generated_images_epoch_{label}.png")
-        vutils.save_image(sample_images, save_path, nrow=8, normalize=True)
+        vutils.save_image(sample_images, save_path, nrow=8)
         log(f"Saved sample images at epoch {label} to {save_path}")
 
     # Data loaders
