@@ -57,6 +57,10 @@ def calculate_inception_score(images, batch_size=32, splits=10):
     return torch.tensor(scores).mean(), torch.tensor(scores).std()
 
 
+def construct_noise(shape: tuple):
+    return torch.randn(shape)
+
+
 def run():
     # Hyperparameters
     img_size = 32
@@ -73,7 +77,7 @@ def run():
     betas = (0.5, 0.999)
 
     def save_images(label: str | int, model: modules.ViTGAN):
-        noise = torch.randn(64, in_chans, img_size, img_size).to(device)
+        noise = construct_noise(shape=(64, in_chans, img_size, img_size)).to(device)
         sample_images = model.generator(noise).detach().cpu()
         save_path = os.path.join(SAVE_DIR, f"generated_images_epoch_{label}.png")
         vutils.save_image(sample_images, save_path, nrow=8, normalize=True)
@@ -125,8 +129,8 @@ def run():
                 # Train Discriminator
                 vit_gan.discriminator.zero_grad()
                 real_output = vit_gan.discriminator(real_images_normalized)
-                noise = torch.randn(
-                    real_images_normalized.size(0), in_chans, img_size, img_size
+                noise = construct_noise(
+                    shape=(real_images_normalized.size(0), in_chans, img_size, img_size)
                 ).to(device)
                 fake_images = vit_gan.generator(noise).detach()
                 fake_output = vit_gan.discriminator(fake_images)
@@ -140,11 +144,9 @@ def run():
 
                 # Train Generator
                 vit_gan.generator.zero_grad()
-                noise = torch.randn(
-                    real_images_normalized.size(0), in_chans, img_size, img_size
-                ).to(
-                    device
-                )  # Generate new noise for generator training
+                noise = construct_noise(
+                    shape=(real_images_normalized.size(0), in_chans, img_size, img_size)
+                ).to(device)
                 fake_images = vit_gan.generator(noise)
                 fake_output = vit_gan.discriminator(fake_images)
                 gen_loss = F.binary_cross_entropy_with_logits(
@@ -154,8 +156,13 @@ def run():
                 gen_opt.step()
 
                 if i % 100 == 0:
-                    noise = torch.randn(
-                        real_images_normalized.size(0), in_chans, img_size, img_size
+                    noise = construct_noise(
+                        shape=(
+                            real_images_normalized.size(0),
+                            in_chans,
+                            img_size,
+                            img_size,
+                        )
                     ).to(
                         device
                     )  # Generate new noise for evaluation
