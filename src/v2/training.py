@@ -1,5 +1,7 @@
 import datetime
+from hmac import new
 import os
+from random import randint
 from typing import Union
 import torch
 import rich
@@ -18,11 +20,6 @@ START_TIME = datetime.datetime.now()
 BASE_DIR = os.getenv("SCRATCH", "~")
 OUTPUT_DIR = f"{BASE_DIR}/output"
 SAVE_DIR = os.path.join(OUTPUT_DIR, START_TIME.strftime("%Y%m%d-%H%M%S"))
-
-if not os.path.exists(OUTPUT_DIR):
-    os.mkdir(OUTPUT_DIR)
-if not os.path.exists(SAVE_DIR):
-    os.mkdir(SAVE_DIR)
 
 
 def log(message: str):
@@ -62,6 +59,11 @@ def calculate_inception_score(images, batch_size=32, splits=10):
 
 
 def run():
+    if not os.path.exists(OUTPUT_DIR):
+        os.mkdir(OUTPUT_DIR)
+    if not os.path.exists(SAVE_DIR):
+        os.mkdir(SAVE_DIR)
+
     # Hyperparameters
     img_size = 32
     patch_size = 4
@@ -78,36 +80,27 @@ def run():
     noise_shape = 1, in_chans, img_size, img_size
 
     def construct_noise():
-        noise = torch.randn(
-            noise_shape, device=device, generator=torch.Generator(device=device)
-        )
-        for _ in range(img_size * 2):
-            new_noise = torch.randn(
-                device=device, generator=torch.Generator(device=device)
-            )
-            noise = torch.cat((noise, new_noise.unsqueeze(2)), dim=1)
-        # truth_map = from_numpy(
-        #     np.fromiter(
-        #         (
-        #             torch.any(torch.eq(tensor1, tensor2)).item()
-        #             for tensor1, tensor2 in combinations(noise, 2)
-        #         ),
-        #         Tensor,
-        #     )
-        # )
-        # if torch.any(truth_map).cpu().item():
-        #     log("Noise collisions detected!")
-        #     sys.exit(1)
-        return noise
+        noise = []
+        for i in range(img_size * 2):
+            torch.manual_seed(i * randint(0, 1000))
+            if not noise:
+                new_noise = torch.randn(noise_shape, device=device)
+            else:
+                new_noise = torch.randn_like(noise[0], device=device)
+            noise.append(new_noise)
+        return torch.cat(noise, 0)
 
     def save_images(label: Union[str, int], model: modules.ViTGAN):
         noise = construct_noise().to(device)
+        noises = [noise.detach().cpu()[i] for i in range(img_size * 2)]
         sample_images = [
             model.generator(noise).detach().cpu()[0] for _ in range(img_size * 2)
         ]
-        save_path = os.path.join(SAVE_DIR, f"generated_images_epoch_{label}.png")
-        vutils.save_image(sample_images, save_path, nrow=8)
-        log(f"Saved sample images at epoch {label} to {save_path}")
+        images_save_path = os.path.join(SAVE_DIR, f"generated_images_epoch_{label}.png")
+        noise_save_path = os.path.join(SAVE_DIR, f"noise__{label}.png")
+        vutils.save_image(sample_images, images_save_path, nrow=8, normalize=True)
+        vutils.save_image(noises, noise_save_path, nrow=8, normalize=True)
+        log(f"[{label=}] Saved noise and sample images at epoch {label} to {SAVE_DIR}")
 
     # Data loaders
     transform = transforms.Compose(
