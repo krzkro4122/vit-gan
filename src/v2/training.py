@@ -7,7 +7,6 @@ import torchvision.datasets as datasets
 import torchvision.utils as vutils
 import src.v2.modules as modules
 
-from random import randint
 from typing import Union
 from torch.optim.adam import Adam
 from torch.utils.data import DataLoader
@@ -36,39 +35,26 @@ def run():
     depth = 6
     num_heads = 8
     mlp_ratio = 4.0
-    dropout_rate = 0.0
+    dropout_rate = 0.2
     batch_size = 64
     epochs = 100
-    learning_rate = 2e-4
+    learning_rate = 6e-5
     betas = (0.5, 0.999)
-    noise_shape = 1, in_chans, img_size, img_size
+    noise_shape = in_chans, img_size, img_size  # Latent dimension for noise
 
-    def construct_noise():
-        noise = []
-        for i in range(batch_size):
-            torch.manual_seed(i * randint(0, 1000))
-            if not noise:
-                new_noise = torch.randn(noise_shape, device=device)
-            else:
-                new_noise = torch.randn_like(noise[0], device=device)
-            noise.append(new_noise)
-        return torch.cat(noise, 0).to(device)
+    def construct_noise(batch_size: int, noise_shape: tuple):
+        return torch.randn(batch_size, *noise_shape, device=device)
 
     def save_images(label: Union[str, int], model: modules.ViTGAN):
-        noises = []
-        sample_images = []
-        for i in range(batch_size):
-            noise = construct_noise()
-            noises.append(noise.detach().cpu()[i])
-            sample_images.append(model.generator(noise).detach().cpu()[i])
-
+        noise = construct_noise(batch_size, noise_shape)
+        sample_images = model.generator(noise).detach().cpu()
         images_save_path = os.path.join(
             IMAGES_DIR, f"generated_images_epoch_{label}.png"
         )
-        noise_save_path = os.path.join(NOISE_DIR, f"noise__{label}.png")
+        noise_save_path = os.path.join(NOISE_DIR, f"noise_epoch_{label}.png")
         vutils.save_image(sample_images, images_save_path, nrow=8, normalize=True)
-        vutils.save_image(noises, noise_save_path, nrow=8, normalize=True)
-        log(f"[{label=}] Saved noise and sample images at epoch {label} to {SAVE_DIR}")
+        vutils.save_image(noise, noise_save_path, nrow=8, normalize=True)
+        log(f"[{label=}] Saved sample images at epoch {label} to {SAVE_DIR}")
 
     # Data loaders
     transform = transforms.Compose(
@@ -132,7 +118,7 @@ def run():
                 # Train Discriminator
                 vit_gan.discriminator.zero_grad()
                 real_output = vit_gan.discriminator(real_images_normalized)
-                noise = construct_noise()
+                noise = construct_noise(batch_size, noise_shape)
                 fake_images = vit_gan.generator(noise).detach()
                 fake_output = vit_gan.discriminator(fake_images)
                 disc_loss = F.binary_cross_entropy_with_logits(
@@ -145,7 +131,7 @@ def run():
 
                 # Train Generator
                 vit_gan.generator.zero_grad()
-                noise = construct_noise()
+                noise = construct_noise(batch_size, noise_shape)
                 fake_images = vit_gan.generator(noise)
                 fake_output = vit_gan.discriminator(fake_images)
                 gen_loss = F.binary_cross_entropy_with_logits(
@@ -155,7 +141,7 @@ def run():
                 gen_opt.step()
 
                 if i % 100 == 0:
-                    noise = construct_noise()
+                    noise = construct_noise(batch_size, noise_shape)
                     fake_images = vit_gan.generator(noise).detach()
                     real_images_uint8 = convert_to_uint8(real_images_normalized).to(
                         device

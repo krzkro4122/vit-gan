@@ -8,14 +8,22 @@ class PatchEmbedding(nn.Module):
         self.img_size = img_size
         self.patch_size = patch_size
         self.num_patches = (img_size // patch_size) ** 2
-        self.proj = nn.Conv2d(
-            in_chans, embed_dim, kernel_size=patch_size, stride=patch_size
-        )
+        self.embed_dim = embed_dim
+        self.patch_dim = patch_size * patch_size * in_chans
+        self.proj = nn.Linear(self.patch_dim, embed_dim)
 
     def forward(self, x):
+        B, C, H, W = x.shape
+        x = x.reshape(
+            B,
+            C,
+            H // self.patch_size,
+            self.patch_size,
+            W // self.patch_size,
+            self.patch_size,
+        )
+        x = x.permute(0, 2, 4, 3, 5, 1).reshape(B, -1, self.patch_dim)
         x = self.proj(x)
-        x = x.flatten(2)
-        x = x.transpose(1, 2)
         return x
 
 
