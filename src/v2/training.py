@@ -81,7 +81,7 @@ def run():
 
     def construct_noise():
         noise = []
-        for i in range(img_size * 2):
+        for i in range(batch_size):
             torch.manual_seed(i * randint(0, 1000))
             if not noise:
                 new_noise = torch.randn(noise_shape, device=device)
@@ -93,7 +93,7 @@ def run():
     def save_images(label: Union[str, int], model: modules.ViTGAN):
         noises = []
         sample_images = []
-        for i in range(img_size * 2):
+        for i in range(batch_size):
             noise = construct_noise().to(device)
             noises.append(noise.detach().cpu()[i])
             sample_images.append(model.generator(noise).detach().cpu()[i])
