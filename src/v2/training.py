@@ -1,5 +1,4 @@
 import datetime
-from hmac import new
 import os
 from random import randint
 from typing import Union
@@ -20,6 +19,8 @@ START_TIME = datetime.datetime.now()
 BASE_DIR = os.getenv("SCRATCH", "~")
 OUTPUT_DIR = f"{BASE_DIR}/output"
 SAVE_DIR = os.path.join(OUTPUT_DIR, START_TIME.strftime("%Y%m%d-%H%M%S"))
+IMAGES_DIR = os.path.join(SAVE_DIR, "images")
+NOISE_DIR = os.path.join(SAVE_DIR, "noise")
 
 
 def log(message: str):
@@ -63,6 +64,10 @@ def run():
         os.mkdir(OUTPUT_DIR)
     if not os.path.exists(SAVE_DIR):
         os.mkdir(SAVE_DIR)
+    if not os.path.exists(IMAGES_DIR):
+        os.mkdir(IMAGES_DIR)
+    if not os.path.exists(NOISE_DIR):
+        os.mkdir(NOISE_DIR)
 
     # Hyperparameters
     img_size = 32
@@ -75,7 +80,7 @@ def run():
     dropout_rate = 0.0
     batch_size = 64
     epochs = 100
-    learning_rate = 2e-5
+    learning_rate = 2e-4
     betas = (0.5, 0.999)
     noise_shape = 1, in_chans, img_size, img_size
 
@@ -98,8 +103,10 @@ def run():
             noises.append(noise.detach().cpu()[i])
             sample_images.append(model.generator(noise).detach().cpu()[i])
 
-        images_save_path = os.path.join(SAVE_DIR, f"generated_images_epoch_{label}.png")
-        noise_save_path = os.path.join(SAVE_DIR, f"noise__{label}.png")
+        images_save_path = os.path.join(
+            IMAGES_DIR, f"generated_images_epoch_{label}.png"
+        )
+        noise_save_path = os.path.join(NOISE_DIR, f"noise__{label}.png")
         vutils.save_image(sample_images, images_save_path, nrow=8, normalize=True)
         vutils.save_image(noises, noise_save_path, nrow=8, normalize=True)
         log(f"[{label=}] Saved noise and sample images at epoch {label} to {SAVE_DIR}")
@@ -139,6 +146,22 @@ def run():
 
     try:
         log(f"Starting training at: {str(datetime.datetime.now())}")
+        log(
+            "Parameters:\n"
+            f"  {img_size=}\n"
+            f"  {patch_size=}\n"
+            f"  {in_chans=}\n"
+            f"  {embed_dim=}\n"
+            f"  {depth=}\n"
+            f"  {num_heads=}\n"
+            f"  {mlp_ratio=}\n"
+            f"  {dropout_rate=}\n"
+            f"  {batch_size=}\n"
+            f"  {epochs=}\n"
+            f"  {learning_rate=}\n"
+            f"  {betas=}\n"
+            f"  {noise_shape=} "
+        )
         # Training Loop
         for epoch in range(epochs):
             save_images(model=vit_gan, label=epoch)
