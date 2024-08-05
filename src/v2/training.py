@@ -5,20 +5,19 @@ import torch.nn.functional as F
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.utils as vutils
+import src.v2.modules as modules
 
 from random import randint
 from typing import Union
 from torch.optim.adam import Adam
 from torch.utils.data import DataLoader
 from torchmetrics.image.fid import FrechetInceptionDistance
-
-import src.v2.modules as modules
 from src.v2.utils import (
     log,
     ToTensorUInt8,
     convert_to_uint8,
     calculate_inception_score,
-    OUTPUT_DIR,
+    construct_directories,
     SAVE_DIR,
     START_TIME,
     IMAGES_DIR,
@@ -27,14 +26,7 @@ from src.v2.utils import (
 
 
 def run():
-    if not os.path.exists(OUTPUT_DIR):
-        os.mkdir(OUTPUT_DIR)
-    if not os.path.exists(SAVE_DIR):
-        os.mkdir(SAVE_DIR)
-    if not os.path.exists(IMAGES_DIR):
-        os.mkdir(IMAGES_DIR)
-    if not os.path.exists(NOISE_DIR):
-        os.mkdir(NOISE_DIR)
+    construct_directories()
 
     # Hyperparameters
     img_size = 32
@@ -60,13 +52,13 @@ def run():
             else:
                 new_noise = torch.randn_like(noise[0], device=device)
             noise.append(new_noise)
-        return torch.cat(noise, 0)
+        return torch.cat(noise, 0).to(device)
 
     def save_images(label: Union[str, int], model: modules.ViTGAN):
         noises = []
         sample_images = []
         for i in range(batch_size):
-            noise = construct_noise().to(device)
+            noise = construct_noise()
             noises.append(noise.detach().cpu()[i])
             sample_images.append(model.generator(noise).detach().cpu()[i])
 
@@ -140,7 +132,7 @@ def run():
                 # Train Discriminator
                 vit_gan.discriminator.zero_grad()
                 real_output = vit_gan.discriminator(real_images_normalized)
-                noise = construct_noise().to(device)
+                noise = construct_noise()
                 fake_images = vit_gan.generator(noise).detach()
                 fake_output = vit_gan.discriminator(fake_images)
                 disc_loss = F.binary_cross_entropy_with_logits(
@@ -153,7 +145,7 @@ def run():
 
                 # Train Generator
                 vit_gan.generator.zero_grad()
-                noise = construct_noise().to(device)
+                noise = construct_noise()
                 fake_images = vit_gan.generator(noise)
                 fake_output = vit_gan.discriminator(fake_images)
                 gen_loss = F.binary_cross_entropy_with_logits(
@@ -163,9 +155,7 @@ def run():
                 gen_opt.step()
 
                 if i % 100 == 0:
-                    noise = construct_noise().to(
-                        device
-                    )  # Generate new noise for evaluation
+                    noise = construct_noise()
                     fake_images = vit_gan.generator(noise).detach()
                     real_images_uint8 = convert_to_uint8(real_images_normalized).to(
                         device

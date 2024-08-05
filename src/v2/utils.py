@@ -15,6 +15,17 @@ IMAGES_DIR = os.path.join(SAVE_DIR, "images")
 NOISE_DIR = os.path.join(SAVE_DIR, "noise")
 
 
+def construct_directories():
+    if not os.path.exists(OUTPUT_DIR):
+        os.mkdir(OUTPUT_DIR)
+    if not os.path.exists(SAVE_DIR):
+        os.mkdir(SAVE_DIR)
+    if not os.path.exists(IMAGES_DIR):
+        os.mkdir(IMAGES_DIR)
+    if not os.path.exists(NOISE_DIR):
+        os.mkdir(NOISE_DIR)
+
+
 def log(message: str):
     rich.print(message)
     with open(os.path.join(SAVE_DIR, "training.log"), "a", encoding="utf-8") as handle:
