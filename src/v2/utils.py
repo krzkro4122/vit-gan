@@ -8,7 +8,7 @@ from pytorch_fid.inception import InceptionV3
 
 
 START_TIME = datetime.datetime.now()
-BASE_DIR = os.getenv("SCRATCH", "~")
+BASE_DIR = os.getenv("SCRATCH", ".")
 OUTPUT_DIR = f"{BASE_DIR}/output"
 SAVE_DIR = os.path.join(OUTPUT_DIR, START_TIME.strftime("%Y%m%d-%H%M%S"))
 IMAGES_DIR = os.path.join(SAVE_DIR, "images")

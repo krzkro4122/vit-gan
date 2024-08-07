@@ -42,11 +42,11 @@ def run():
     betas = (0.5, 0.999)
     noise_shape = in_chans, img_size, img_size  # Latent dimension for noise
 
-    def construct_noise(batch_size: int, noise_shape: tuple):
+    def construct_noise():
         return torch.randn(batch_size, *noise_shape, device=device)
 
     def save_images(label: Union[str, int], model: modules.ViTGAN):
-        noise = construct_noise(batch_size, noise_shape)
+        noise = construct_noise()
         sample_images = model.generator(noise).detach().cpu()
         images_save_path = os.path.join(
             IMAGES_DIR, f"generated_images_epoch_{label}.png"
@@ -118,7 +118,7 @@ def run():
                 # Train Discriminator
                 vit_gan.discriminator.zero_grad()
                 real_output = vit_gan.discriminator(real_images_normalized)
-                noise = construct_noise(batch_size, noise_shape)
+                noise = construct_noise()
                 fake_images = vit_gan.generator(noise).detach()
                 fake_output = vit_gan.discriminator(fake_images)
                 disc_loss = F.binary_cross_entropy_with_logits(
@@ -131,7 +131,7 @@ def run():
 
                 # Train Generator
                 vit_gan.generator.zero_grad()
-                noise = construct_noise(batch_size, noise_shape)
+                noise = construct_noise()
                 fake_images = vit_gan.generator(noise)
                 fake_output = vit_gan.discriminator(fake_images)
                 gen_loss = F.binary_cross_entropy_with_logits(
@@ -141,7 +141,7 @@ def run():
                 gen_opt.step()
 
                 if i % 100 == 0:
-                    noise = construct_noise(batch_size, noise_shape)
+                    noise = construct_noise()
                     fake_images = vit_gan.generator(noise).detach()
                     real_images_uint8 = convert_to_uint8(real_images_normalized).to(
                         device
