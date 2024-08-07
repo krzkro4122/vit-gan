@@ -1,8 +1,10 @@
 import os
+
 import torch
 import torchvision.utils as vutils
 
 from src.v2.modules import ViTGAN
+
 
 def test():
     # Hyperparameters
@@ -44,13 +46,11 @@ def test():
 
     vit_gan.eval()
 
-
-    def construct_noise(batch_size: int, noise_shape: tuple):
+    def construct_noise():
         return torch.randn(batch_size, *noise_shape, device=device)
 
-
     def save_images(model: ViTGAN):
-        noise = construct_noise(batch_size, noise_shape)
+        noise = construct_noise()
         sample_images = [
             model.generator(noise).detach().cpu()[i] for i in range(batch_size)
         ]
@@ -59,6 +59,5 @@ def test():
         vutils.save_image(sample_images, images_save_path, nrow=8, normalize=True)
         vutils.save_image(noise, noise_save_path, nrow=8, normalize=True)
         print(f"{batch_size} Generated images and noise saved to {test_dir}")
-
 
     save_images(vit_gan)
