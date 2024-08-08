@@ -37,8 +37,8 @@ def run():
     mlp_ratio = 4.0
     dropout_rate = 0.2
     batch_size = 64
-    epochs = 1000
-    learning_rate = 6e-5
+    epochs = 10000
+    learning_rate = 4e-5
     betas = (0.5, 0.999)
     noise_shape = in_chans, img_size, img_size  # Latent dimension for noise
 
