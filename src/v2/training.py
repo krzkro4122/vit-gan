@@ -32,15 +32,15 @@ def run():
     patch_size = 4
     in_chans = 3
     embed_dim = 256
-    depth = 6
+    no_of_transformer_blocks = 6
     num_heads = 8
     mlp_ratio = 4.0
     dropout_rate = 0.2
     batch_size = 64
     epochs = 10000
     learning_rate = 4e-5
-    betas = (0.5, 0.999)
-    noise_shape = in_chans, img_size, img_size  # Latent dimension for noise
+    optimizer_betas = (0.5, 0.999)
+    noise_shape = in_chans, img_size, img_size
 
     def construct_noise():
         return torch.randn(batch_size, *noise_shape, device=device)
@@ -79,13 +79,17 @@ def run():
         patch_size,
         in_chans,
         embed_dim,
-        depth,
+        no_of_transformer_blocks,
         num_heads,
         mlp_ratio,
         dropout_rate,
     ).to(device)
-    gen_opt = Adam(vit_gan.generator.parameters(), lr=learning_rate, betas=betas)
-    disc_opt = Adam(vit_gan.discriminator.parameters(), lr=learning_rate, betas=betas)
+    gen_optimizer = Adam(
+        vit_gan.generator.parameters(), lr=learning_rate, betas=optimizer_betas
+    )
+    disc_optimizer = Adam(
+        vit_gan.discriminator.parameters(), lr=learning_rate, betas=optimizer_betas
+    )
 
     fid = FrechetInceptionDistance(feature=2048).to(device)
 
@@ -97,14 +101,14 @@ def run():
             f"  {patch_size=}\n"
             f"  {in_chans=}\n"
             f"  {embed_dim=}\n"
-            f"  {depth=}\n"
+            f"  {no_of_transformer_blocks=}\n"
             f"  {num_heads=}\n"
             f"  {mlp_ratio=}\n"
             f"  {dropout_rate=}\n"
             f"  {batch_size=}\n"
             f"  {epochs=}\n"
             f"  {learning_rate=}\n"
-            f"  {betas=}\n"
+            f"  {optimizer_betas=}\n"
             f"  {noise_shape=} "
         )
         # Training Loop
@@ -127,7 +131,7 @@ def run():
                     fake_output, torch.zeros_like(fake_output)
                 )
                 disc_loss.backward()
-                disc_opt.step()
+                disc_optimizer.step()
 
                 # Train Generator
                 vit_gan.generator.zero_grad()
@@ -138,7 +142,7 @@ def run():
                     fake_output, torch.ones_like(fake_output)
                 )
                 gen_loss.backward()
-                gen_opt.step()
+                gen_optimizer.step()
 
                 if i % 100 == 0:
                     noise = construct_noise()
