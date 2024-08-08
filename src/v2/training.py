@@ -157,6 +157,8 @@ def run():
 
     except KeyboardInterrupt as ke:
         log(f"{ke} raised!")
+    except Exception as e:
+        log(f"{e} raised!")
     finally:
         model_name = "model.ckpt"
         model_path = os.path.join(SAVE_DIR, model_name)
