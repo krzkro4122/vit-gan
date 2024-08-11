@@ -21,6 +21,7 @@ from src.v2.utils import (
     START_TIME,
     IMAGES_DIR,
     NOISE_DIR,
+    INPUT_DIR,
 )
 
 
@@ -35,7 +36,7 @@ def run():
     no_of_transformer_blocks = 6
     num_heads = 8
     mlp_ratio = 4.0
-    dropout_rate = 0.2
+    dropout_rate = 0.1
     batch_size = 64
     epochs = 10000
     learning_rate = 4e-5
@@ -45,16 +46,30 @@ def run():
     def construct_noise():
         return torch.randn(batch_size, *noise_shape, device=device)
 
-    def save_images(label: Union[str, int], model: modules.ViTGAN):
+    def denormalize(imgs):
+        return imgs * 0.5 + 0.5  # Convert from [-1,1] to [0,1]
+
+    def save_images(save_path: str, images: torch.Tensor):
+        vutils.save_image(images, save_path, nrow=8, normalize=True)
+
+    def save_noise(label: Union[str, int]):
         noise = construct_noise()
-        sample_images = model.generator(noise).detach().cpu()
-        images_save_path = os.path.join(
-            IMAGES_DIR, f"generated_images_epoch_{label}.png"
-        )
-        noise_save_path = os.path.join(NOISE_DIR, f"noise_epoch_{label}.png")
-        vutils.save_image(sample_images, images_save_path, nrow=8, normalize=True)
-        vutils.save_image(noise, noise_save_path, nrow=8, normalize=True)
-        log(f"[{label=}] Saved sample images at epoch {label} to {SAVE_DIR}")
+        save_path = os.path.join(NOISE_DIR, f"noise_epoch_{label}.png")
+        save_images(save_path, noise)
+        log(f"[{label=}] Saved noise to {SAVE_DIR}")
+        return noise
+
+    def save_samples(label: Union[str, int], model: modules.ViTGAN, noise: Tensor):
+        noise = construct_noise()
+        image_samples = model.generator(noise).detach().cpu()
+        save_path = os.path.join(IMAGES_DIR, f"samples_epoch_{label}.png")
+        save_images(save_path, image_samples)
+        log(f"[{label=}] Saved samples to {SAVE_DIR}")
+
+    def save_input(label: Union[str, int], loaded_images: torch.Tensor):
+        save_path = os.path.join(INPUT_DIR, f"input_{label}.png")
+        save_images(images=loaded_images, save_path=save_path)
+        log(f"[{label=}] Saved input to {SAVE_DIR}")
 
     # Data loaders
     transform = transforms.Compose(
@@ -113,11 +128,17 @@ def run():
         )
         # Training Loop
         for epoch in range(epochs):
-            save_images(model=vit_gan, label=epoch)
+            noise = save_noise(label=epoch)
+            save_samples(model=vit_gan, label=epoch, noise=noise)
             for i, (real_images, _) in enumerate(train_loader):
                 real_images_normalized = (
                     real_images.to(device).float() / 255.0 * 2 - 1
                 )  # Normalize to [-1, 1]
+
+                save_input(loaded_images=real_images, label=f"e{epoch}_i{i}")
+                save_input(
+                    loaded_images=real_images_normalized, label=f"e{epoch}_i{i}_n"
+                )
 
                 # Train Discriminator
                 vit_gan.discriminator.zero_grad()
@@ -170,4 +191,5 @@ def run():
             f"Run took {str(datetime.datetime.now() - START_TIME)}. Saving the model to: {model_path}"
         )
         torch.save(vit_gan.state_dict(), model_path)
-        save_images("end", vit_gan)
+        noise = save_noise(label="end")
+        save_samples(model=vit_gan, label=epoch, noise=noise)

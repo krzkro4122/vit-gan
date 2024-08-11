@@ -13,6 +13,7 @@ OUTPUT_DIR = f"{BASE_DIR}/output"
 SAVE_DIR = os.path.join(OUTPUT_DIR, START_TIME.strftime("%Y%m%d-%H%M%S"))
 IMAGES_DIR = os.path.join(SAVE_DIR, "images")
 NOISE_DIR = os.path.join(SAVE_DIR, "noise")
+INPUT_DIR = os.path.join(SAVE_DIR, "input")
 
 
 def construct_directories():
@@ -24,6 +25,8 @@ def construct_directories():
         os.mkdir(IMAGES_DIR)
     if not os.path.exists(NOISE_DIR):
         os.mkdir(NOISE_DIR)
+    if not os.path.exists(INPUT_DIR):
+        os.mkdir(INPUT_DIR)
 
 
 def log(message: str):
