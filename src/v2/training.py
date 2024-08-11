@@ -1,5 +1,6 @@
 import datetime
 import os
+import traceback
 import torch
 import torch.nn.functional as F
 import torchvision.transforms as transforms
@@ -59,11 +60,12 @@ def run():
         log(f"[{label=}] Saved noise to {SAVE_DIR}")
         return noise
 
-    def save_samples(label: Union[str, int], model: modules.ViTGAN, noise: Tensor):
-        noise = construct_noise()
-        image_samples = model.generator(noise).detach().cpu()
-        save_path = os.path.join(IMAGES_DIR, f"samples_epoch_{label}.png")
-        save_images(save_path, image_samples)
+    def save_samples(label: Union[str, int], noise: torch.Tensor):
+        with torch.no_grad():
+            image_samples = vit_gan.generator(noise).detach().cpu()
+            image_samples = denormalize(image_samples)
+            save_path = os.path.join(IMAGES_DIR, f"samples_epoch_{label}.png")
+            save_images(save_path, image_samples)
         log(f"[{label=}] Saved samples to {SAVE_DIR}")
 
     def save_input(label: Union[str, int], loaded_images: torch.Tensor):
@@ -75,7 +77,8 @@ def run():
     transform = transforms.Compose(
         [
             transforms.Resize((img_size, img_size)),
-            ToTensorUInt8(),
+            transforms.ToTensor(),  # Converts to [0,1]
+            transforms.Normalize((0.5,), (0.5,)),  # Normalizes to [-1,1]
         ]
     )
     train_dataset = datasets.CIFAR10(
@@ -129,61 +132,60 @@ def run():
         # Training Loop
         for epoch in range(epochs):
             noise = save_noise(label=epoch)
-            save_samples(model=vit_gan, label=epoch, noise=noise)
+            save_samples(label=epoch, noise=noise)
             for i, (real_images, _) in enumerate(train_loader):
-                real_images_normalized = (
-                    real_images.to(device).float() / 255.0 * 2 - 1
-                )  # Normalize to [-1, 1]
-
-                save_input(loaded_images=real_images, label=f"e{epoch}_i{i}")
-                save_input(
-                    loaded_images=real_images_normalized, label=f"e{epoch}_i{i}_n"
-                )
+                real_images = real_images.to(device)
 
                 # Train Discriminator
                 vit_gan.discriminator.zero_grad()
-                real_output = vit_gan.discriminator(real_images_normalized)
+                real_output = vit_gan.discriminator(real_images)
                 noise = construct_noise()
-                fake_images = vit_gan.generator(noise).detach()
-                fake_output = vit_gan.discriminator(fake_images)
-                disc_loss = F.binary_cross_entropy_with_logits(
+                fake_images = vit_gan.generator(noise)
+                fake_output = vit_gan.discriminator(fake_images.detach())
+                disc_loss_real = F.binary_cross_entropy_with_logits(
                     real_output, torch.ones_like(real_output)
-                ) + F.binary_cross_entropy_with_logits(
+                )
+                disc_loss_fake = F.binary_cross_entropy_with_logits(
                     fake_output, torch.zeros_like(fake_output)
                 )
+                disc_loss = disc_loss_real + disc_loss_fake
                 disc_loss.backward()
                 disc_optimizer.step()
 
                 # Train Generator
                 vit_gan.generator.zero_grad()
-                noise = construct_noise()
-                fake_images = vit_gan.generator(noise)
-                fake_output = vit_gan.discriminator(fake_images)
+                output = vit_gan.discriminator(fake_images)
                 gen_loss = F.binary_cross_entropy_with_logits(
-                    fake_output, torch.ones_like(fake_output)
+                    output, torch.ones_like(output)
                 )
                 gen_loss.backward()
                 gen_optimizer.step()
 
-                if i % 100 == 0:
-                    noise = construct_noise()
-                    fake_images = vit_gan.generator(noise).detach()
-                    real_images_uint8 = convert_to_uint8(real_images_normalized).to(
-                        device
-                    )
-                    fake_images_uint8 = convert_to_uint8(fake_images).to(device)
-                    fid.update(real_images_uint8, real=True)
-                    fid.update(fake_images_uint8, real=False)
-                    is_score, is_std = calculate_inception_score(fake_images_uint8)
-                    log(
-                        f"Epoch [{epoch+1}/{epochs}], Step [{i}/{len(train_loader)}] | Disc Loss: {disc_loss.item():.4f}, Gen Loss: {gen_loss.item():.4f} | FID: {fid.compute().item():.4f}, IS: {is_score.item():.4f} ± {is_std.item():.4f}"
-                    )
-                    fid.reset()
+                if i % 392 == 0:
+                    save_input(loaded_images=real_images, label=f"{epoch}_i{i}")
 
+                if i % 100 == 0:
+                    with torch.no_grad():
+                        noise = construct_noise()
+                        fake_images = vit_gan.generator(noise).detach()
+
+                        real_images_uint8 = convert_to_uint8(real_images)
+                        fake_images_uint8 = convert_to_uint8(fake_images)
+
+                        fid.update(real_images_uint8, real=True)
+                        fid.update(fake_images_uint8, real=False)
+
+                        fid_score = fid.compute().item()
+                        fid.reset()
+                    log(
+                        f"Epoch [{epoch+1}/{epochs}], Step [{i}/{len(train_loader)}] | "
+                        f"Disc Loss: {disc_loss.item():.4f}, Gen Loss: {gen_loss.item():.4f} | "
+                        f"FID: {fid_score:.4f}"
+                    )
     except KeyboardInterrupt as ke:
         log(f"{ke} raised!")
     except Exception as e:
-        log(f"{e} raised!")
+        log(f"{e} raised!\n{traceback.format_exc()}")
     finally:
         model_name = "model.ckpt"
         model_path = os.path.join(SAVE_DIR, model_name)
@@ -192,4 +194,4 @@ def run():
         )
         torch.save(vit_gan.state_dict(), model_path)
         noise = save_noise(label="end")
-        save_samples(model=vit_gan, label=epoch, noise=noise)
+        save_samples(label=epoch, noise=noise)

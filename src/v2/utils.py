@@ -9,7 +9,7 @@ from pytorch_fid.inception import InceptionV3
 
 START_TIME = datetime.datetime.now()
 BASE_DIR = os.getenv("SCRATCH", ".")
-OUTPUT_DIR = f"{BASE_DIR}/output"
+OUTPUT_DIR = os.path.join(f"{BASE_DIR}", "output")
 SAVE_DIR = os.path.join(OUTPUT_DIR, START_TIME.strftime("%Y%m%d-%H%M%S"))
 IMAGES_DIR = os.path.join(SAVE_DIR, "images")
 NOISE_DIR = os.path.join(SAVE_DIR, "noise")
@@ -17,22 +17,18 @@ INPUT_DIR = os.path.join(SAVE_DIR, "input")
 
 
 def construct_directories():
-    if not os.path.exists(OUTPUT_DIR):
-        os.mkdir(OUTPUT_DIR)
-    if not os.path.exists(SAVE_DIR):
-        os.mkdir(SAVE_DIR)
-    if not os.path.exists(IMAGES_DIR):
-        os.mkdir(IMAGES_DIR)
-    if not os.path.exists(NOISE_DIR):
-        os.mkdir(NOISE_DIR)
-    if not os.path.exists(INPUT_DIR):
-        os.mkdir(INPUT_DIR)
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    os.makedirs(SAVE_DIR, exist_ok=True)
+    os.makedirs(IMAGES_DIR, exist_ok=True)
+    os.makedirs(NOISE_DIR, exist_ok=True)
+    os.makedirs(INPUT_DIR, exist_ok=True)
 
 
 def log(message: str):
-    rich.print(message)
+    timestamp = datetime.datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
+    rich.print(f"{timestamp} {message}")
     with open(os.path.join(SAVE_DIR, "training.log"), "a", encoding="utf-8") as handle:
-        handle.write(message + "\n")
+        handle.write(f"{timestamp} {message}\n")
 
 
 class ToTensorUInt8(object):
