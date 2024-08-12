@@ -14,9 +14,7 @@ from torch.utils.data import DataLoader
 from torchmetrics.image.fid import FrechetInceptionDistance
 from src.v2.utils import (
     log,
-    ToTensorUInt8,
     convert_to_uint8,
-    calculate_inception_score,
     construct_directories,
     SAVE_DIR,
     START_TIME,
@@ -39,8 +37,9 @@ def run():
     mlp_ratio = 4.0
     dropout_rate = 0.1
     batch_size = 64
-    epochs = 10000
-    learning_rate = 4e-5
+    epochs = 1e4
+    generator_learning_rate = 2e-4
+    discriminator_learning_rate = 5e-4
     optimizer_betas = (0.5, 0.999)
     noise_shape = in_chans, img_size, img_size
 
@@ -103,10 +102,14 @@ def run():
         dropout_rate,
     ).to(device)
     gen_optimizer = Adam(
-        vit_gan.generator.parameters(), lr=learning_rate, betas=optimizer_betas
+        vit_gan.generator.parameters(),
+        lr=generator_learning_rate,
+        betas=optimizer_betas,
     )
     disc_optimizer = Adam(
-        vit_gan.discriminator.parameters(), lr=learning_rate, betas=optimizer_betas
+        vit_gan.discriminator.parameters(),
+        lr=discriminator_learning_rate,
+        betas=optimizer_betas,
     )
 
     fid = FrechetInceptionDistance(feature=2048).to(device)
@@ -125,7 +128,8 @@ def run():
             f"  {dropout_rate=}\n"
             f"  {batch_size=}\n"
             f"  {epochs=}\n"
-            f"  {learning_rate=}\n"
+            f"  {generator_learning_rate=}\n"
+            f"  {discriminator_learning_rate=}\n"
             f"  {optimizer_betas=}\n"
             f"  {noise_shape=} "
         )
