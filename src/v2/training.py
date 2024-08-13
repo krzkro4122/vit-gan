@@ -38,8 +38,8 @@ def run():
     dropout_rate = 0.1
     batch_size = 64
     epochs = 10_000
-    generator_learning_rate = 2e-4
-    discriminator_learning_rate = 5e-4
+    generator_learning_rate = 10e-5
+    discriminator_learning_rate = 3e-5
     optimizer_betas = (0.5, 0.999)
     noise_shape = in_chans, img_size, img_size
 
