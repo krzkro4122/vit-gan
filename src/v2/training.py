@@ -36,7 +36,7 @@ def run():
     num_heads = 8
     mlp_ratio = 4.0
     dropout_rate = 0.1
-    batch_size = 64
+    batch_size = 128
     epochs = 10_000
     generator_learning_rate = 10e-5
     discriminator_learning_rate = 3e-5
@@ -139,6 +139,7 @@ def run():
             save_samples(label=epoch, noise=noise)
             for i, (real_images, _) in enumerate(train_loader):
                 real_images = real_images.to(device)
+
 
                 # Train Discriminator
                 vit_gan.discriminator.zero_grad()
