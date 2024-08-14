@@ -159,6 +159,8 @@ def run():
 
                 # Train Generator
                 vit_gan.generator.zero_grad()
+                noise = construct_noise()
+                fake_images = vit_gan.generator(noise)
                 output = vit_gan.discriminator(fake_images)
                 gen_loss = F.binary_cross_entropy_with_logits(
                     output, torch.ones_like(output)
