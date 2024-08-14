@@ -154,9 +154,8 @@ def run():
                         fake_output, torch.zeros_like(fake_output)
                     )
                     disc_loss = disc_loss_real + disc_loss_fake
-
-                disc_loss.backward()
-                disc_optimizer.step()
+                    disc_loss.backward()
+                    disc_optimizer.step()
 
                 # Train Generator
                 vit_gan.generator.zero_grad()
