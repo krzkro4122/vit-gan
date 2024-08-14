@@ -140,23 +140,24 @@ def run():
             for i, (real_images, _) in enumerate(train_loader):
                 real_images = real_images.to(device)
 
-                # Train Discriminator
-                vit_gan.discriminator.zero_grad()
-                real_output = vit_gan.discriminator(real_images)
-                noise = construct_noise()
-                fake_images = vit_gan.generator(noise)
-                fake_output = vit_gan.discriminator(fake_images.detach())
-                disc_loss_real = F.binary_cross_entropy_with_logits(
-                    real_output, torch.ones_like(real_output)
-                )
-                disc_loss_fake = F.binary_cross_entropy_with_logits(
-                    fake_output, torch.zeros_like(fake_output)
-                )
-                disc_loss = disc_loss_real + disc_loss_fake
-                if disc_loss.item() < 1e-7:
-                    raise Exception(
-                        f"The disc loss got really small! ({disc_loss.item()}) Stopping training"
+                if i % 4 == 0:
+                    # Train Discriminator
+                    vit_gan.discriminator.zero_grad()
+                    real_output = vit_gan.discriminator(real_images)
+                    noise = construct_noise()
+                    fake_images = vit_gan.generator(noise)
+                    fake_output = vit_gan.discriminator(fake_images.detach())
+                    disc_loss_real = F.binary_cross_entropy_with_logits(
+                        real_output, torch.ones_like(real_output)
                     )
+                    disc_loss_fake = F.binary_cross_entropy_with_logits(
+                        fake_output, torch.zeros_like(fake_output)
+                    )
+                    disc_loss = disc_loss_real + disc_loss_fake
+                    if disc_loss.item() < 1e-7:
+                        raise Exception(
+                            f"The disc loss got really small! ({disc_loss.item()}) Stopping training"
+                        )
 
                 disc_loss.backward()
                 disc_optimizer.step()
