@@ -135,11 +135,10 @@ def run():
         )
         # Training Loop
         for epoch in range(epochs):
-            noise = save_noise(label=epoch)
+            noise = construct_noise()
             save_samples(label=epoch, noise=noise)
             for i, (real_images, _) in enumerate(train_loader):
                 real_images = real_images.to(device)
-
 
                 # Train Discriminator
                 vit_gan.discriminator.zero_grad()
@@ -165,9 +164,6 @@ def run():
                 )
                 gen_loss.backward()
                 gen_optimizer.step()
-
-                if i % 392 == 0:
-                    save_input(loaded_images=real_images, label=f"{epoch}_i{i}")
 
                 if i % 100 == 0:
                     with torch.no_grad():
@@ -198,5 +194,5 @@ def run():
             f"Run took {str(datetime.datetime.now() - START_TIME)}. Saving the model to: {model_path}"
         )
         torch.save(vit_gan.state_dict(), model_path)
-        noise = save_noise(label="end")
+        noise = construct_noise()
         save_samples(label=epoch, noise=noise)
