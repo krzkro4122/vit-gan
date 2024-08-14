@@ -29,7 +29,7 @@ def run():
 
     # Hyperparameters
     img_size = 32
-    patch_size = 8
+    patch_size = 16
     in_chans = 3
     embed_dim = 256
     no_of_transformer_blocks = 6
