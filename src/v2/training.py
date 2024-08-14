@@ -154,10 +154,6 @@ def run():
                         fake_output, torch.zeros_like(fake_output)
                     )
                     disc_loss = disc_loss_real + disc_loss_fake
-                    if disc_loss.item() < 1e-7:
-                        raise Exception(
-                            f"The disc loss got really small! ({disc_loss.item()}) Stopping training"
-                        )
 
                 disc_loss.backward()
                 disc_optimizer.step()
@@ -184,11 +180,16 @@ def run():
 
                         fid_score = fid.compute().item()
                         fid.reset()
-                    log(
-                        f"Epoch [{epoch+1}/{epochs}], Step [{i}/{len(train_loader)}] | "
-                        f"Disc Loss: {disc_loss.item():.4f}, Gen Loss: {gen_loss.item():.4f} | "
-                        f"FID: {fid_score:.4f}"
-                    )
+                        disc_loss_value = disc_loss.item()
+                        if disc_loss_value < 1e-7:
+                            raise Exception(
+                                f"The disc loss got really small! ({disc_loss_value}) Stopping training"
+                            )
+                        log(
+                            f"Epoch [{epoch+1}/{epochs}], Step [{i}/{len(train_loader)}] | "
+                            f"Disc Loss: {disc_loss_value:.6f}, Gen Loss: {gen_loss.item():.4f} | "
+                            f"FID: {fid_score:.4f}"
+                        )
     except KeyboardInterrupt as ke:
         log(f"{ke} raised!")
     except Exception as e:
