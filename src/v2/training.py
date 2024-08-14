@@ -153,6 +153,11 @@ def run():
                     fake_output, torch.zeros_like(fake_output)
                 )
                 disc_loss = disc_loss_real + disc_loss_fake
+                if disc_loss.item() < 1e-7:
+                    raise Exception(
+                        f"The disc loss got really small! ({disc_loss.item()}) Stopping training"
+                    )
+
                 disc_loss.backward()
                 disc_optimizer.step()
 
