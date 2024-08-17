@@ -29,17 +29,18 @@ def run():
 
     # Hyperparameters
     img_size = 32
-    patch_size = 16
+    patch_size = 8
     in_chans = 3
     embed_dim = 256
     no_of_transformer_blocks = 6
     num_heads = 8
     mlp_ratio = 4.0
     dropout_rate = 0.1
-    batch_size = 256
+    batch_size = 512
     epochs = 10_000
-    generator_learning_rate = 10e-5
-    discriminator_learning_rate = 3e-5
+    generator_learning_rate = 10e-4
+    discriminator_learning_rate = 3e-4
+    discriminator_loss_threshold = 1e-8
     optimizer_betas = (0.5, 0.999)
     noise_shape = in_chans, img_size, img_size
 
@@ -132,6 +133,7 @@ def run():
             f"  {discriminator_learning_rate=}\n"
             f"  {optimizer_betas=}\n"
             f"  {noise_shape=} "
+            f"  {discriminator_loss_threshold=} "
         )
         # Training Loop
         for epoch in range(epochs):
@@ -182,13 +184,13 @@ def run():
                         fid_score = fid.compute().item()
                         fid.reset()
                         disc_loss_value = disc_loss.item()
-                        if disc_loss_value < 1e-7:
+                        if disc_loss_value < discriminator_loss_threshold:
                             raise Exception(
                                 f"The disc loss got really small! ({disc_loss_value}) Stopping training"
                             )
                         log(
                             f"Epoch [{epoch+1}/{epochs}], Step [{i}/{len(train_loader)}] | "
-                            f"Disc Loss: {disc_loss_value:.6f}, Gen Loss: {gen_loss.item():.4f} | "
+                            f"Disc Loss: {disc_loss_value:.8f}, Gen Loss: {gen_loss.item():.4f} | "
                             f"FID: {fid_score:.4f}"
                         )
     except KeyboardInterrupt as ke:
