@@ -82,8 +82,13 @@ def run():
     transform = transforms.Compose(
         [
             transforms.Resize((img_size, img_size)),
-            transforms.ToTensor(),  # Converts to [0,1]
-            transforms.Normalize((0.5,), (0.5,)),  # Normalizes to [-1,1]
+            transforms.RandomHorizontalFlip(),  # Add random horizontal flip
+            transforms.RandomRotation(15),  # Add random rotation
+            transforms.ColorJitter(
+                brightness=0.2, contrast=0.2, saturation=0.2, hue=0.2
+            ),  # Add color jitter
+            transforms.ToTensor(),
+            transforms.Normalize((0.5,), (0.5,)),
         ]
     )
     train_dataset = datasets.CIFAR10(
