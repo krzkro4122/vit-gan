@@ -68,7 +68,7 @@ def run():
     num_heads = 4
     mlp_ratio = 4.0
     dropout_rate = 0.1
-    batch_size = 256
+    batch_size = 512
     epochs = 10_000
     generator_learning_rate = 3e-5
     discriminator_learning_rate = 1e-5
