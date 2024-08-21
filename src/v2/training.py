@@ -201,6 +201,20 @@ def run():
                             f"Disc Loss: {disc_loss_value:.8f}, Gen Loss: {gen_loss.item():.4f} | "
                             f"FID: {fid_score:.4f}"
                         )
+                if i % 1000 == 0:  # Save every 1000 steps
+                    torch.save(
+                        {
+                            "epoch": epoch,
+                            "generator_state_dict": vit_gan.generator.state_dict(),
+                            "discriminator_state_dict": vit_gan.discriminator.state_dict(),
+                            "gen_optimizer_state_dict": gen_optimizer.state_dict(),
+                            "disc_optimizer_state_dict": disc_optimizer.state_dict(),
+                            "loss": gen_loss,
+                        },
+                        os.path.join(
+                            CHECKPOINT_DIR, f"checkpoint_epoch_{epoch}_step_{i}.pth"
+                        ),
+                    )
     except KeyboardInterrupt as ke:
         log(f"{ke} raised!")
     except Exception as e:
