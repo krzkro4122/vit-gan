@@ -64,11 +64,11 @@ def run():
     patch_size = 4
     in_chans = 3
     embed_dim = 512
-    no_of_transformer_blocks = 6
+    no_of_transformer_blocks = 8
     num_heads = 4
     mlp_ratio = 4.0
     dropout_rate = 0.1
-    batch_size = 512
+    batch_size = 256
     epochs = 10_000
     generator_learning_rate = 3e-5
     discriminator_learning_rate = 1e-5
