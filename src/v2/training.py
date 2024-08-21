@@ -1,6 +1,7 @@
 import datetime
 import os
 import traceback
+import math
 from matplotlib import pyplot as plt
 import torch
 import torch.nn.functional as F
@@ -86,7 +87,9 @@ def run():
         return imgs * 0.5 + 0.5  # Convert from [-1,1] to [0,1]
 
     def save_images(save_path: str, images: torch.Tensor):
-        vutils.save_image(images, save_path, nrow=8, normalize=True)
+        vutils.save_image(
+            images, save_path, nrow=math.floor(math.sqrt(batch_size)), normalize=True
+        )
 
     def save_samples(label: Union[str, int], noise: torch.Tensor):
         with torch.no_grad():
