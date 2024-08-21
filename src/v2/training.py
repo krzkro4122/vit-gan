@@ -25,6 +25,25 @@ from src.v2.utils import (
 )
 
 
+# Define WGAN-GP loss
+def gradient_penalty(discriminator, real_images, fake_images):
+    alpha = torch.rand(real_images.size(0), 1, 1, 1, device=real_images.device)
+    interpolates = alpha * real_images + (1 - alpha) * fake_images
+    interpolates.requires_grad_(True)
+
+    disc_interpolates = discriminator(interpolates)
+    gradients = torch.autograd.grad(
+        outputs=disc_interpolates,
+        inputs=interpolates,
+        grad_outputs=torch.ones_like(disc_interpolates),
+        create_graph=True,
+        retain_graph=True,
+    )[0]
+    gradients = gradients.view(gradients.size(0), -1)
+    _gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
+    return _gradient_penalty
+
+
 def run():
     construct_directories()
 
@@ -145,19 +164,16 @@ def run():
                 real_images = real_images.to(device)
 
                 if i % 4 == 0:
-                    # Train Discriminator
-                    vit_gan.discriminator.zero_grad()
+                   # Train Discriminator with WGAN-GP loss
                     real_output = vit_gan.discriminator(real_images)
-                    noise = construct_noise()
                     fake_images = vit_gan.generator(noise)
                     fake_output = vit_gan.discriminator(fake_images.detach())
-                    disc_loss_real = F.binary_cross_entropy_with_logits(
-                        real_output, torch.ones_like(real_output)
-                    )
-                    disc_loss_fake = F.binary_cross_entropy_with_logits(
-                        fake_output, torch.zeros_like(fake_output)
-                    )
-                    disc_loss = disc_loss_real + disc_loss_fake
+
+                    disc_loss_real = -real_output.mean()
+                    disc_loss_fake = fake_output.mean()
+
+                    gp = gradient_penalty(vit_gan.discriminator, real_images, fake_images)
+                    disc_loss = disc_loss_real + disc_loss_fake + 10 * gp  # 10 is the GP weight
                     disc_loss.backward()
                     disc_optimizer.step()
 
@@ -171,7 +187,7 @@ def run():
                 )
                 gen_loss.backward()
                 gen_optimizer.step()
-                
+
                 gen_scheduler.step()
                 disc_scheduler.step()
 
