@@ -51,7 +51,7 @@ def diversity_loss(fake_images):
     for i in range(batch_size):
         for j in range(i + 1, batch_size):
             diversity_loss += torch.mean((fake_images[i] - fake_images[j]).abs())
-    diversity_loss /= (batch_size * (batch_size - 1) / 2)
+    diversity_loss /= batch_size * (batch_size - 1) / 2
     return diversity_loss
 
 
@@ -71,7 +71,7 @@ def run():
     epochs = 10_000
     generator_learning_rate = 3e-5
     discriminator_learning_rate = 1e-5
-    discriminator_loss_threshold = 1e-8
+    discriminator_loss_threshold = 0.3
     optimizer_betas = (0.5, 0.999)
     noise_shape = in_chans, img_size, img_size
 
@@ -174,32 +174,43 @@ def run():
             for i, (real_images, _) in enumerate(train_loader):
                 real_images = real_images.to(device)
 
-                if i % 4 == 0:
-                   # Train Discriminator with WGAN-GP loss
-                    real_output = vit_gan.discriminator(real_images)
-                    fake_images = vit_gan.generator(noise)
-                    fake_output = vit_gan.discriminator(fake_images.detach())
-
-                    disc_loss_real = -real_output.mean()
-                    disc_loss_fake = fake_output.mean()
-
-                    gp = gradient_penalty(vit_gan.discriminator, real_images, fake_images)
-                    disc_loss = disc_loss_real + disc_loss_fake + 10 * gp  # 10 is the GP weight
-                    disc_loss.backward()
-                    disc_optimizer.step()
-
-                # Train Generator
-                vit_gan.generator.zero_grad()
-                noise = construct_noise()
+                # Train Discriminator with WGAN-GP loss
+                real_output = vit_gan.discriminator(real_images)
                 fake_images = vit_gan.generator(noise)
-                output = vit_gan.discriminator(fake_images)
+                fake_output = vit_gan.discriminator(fake_images.detach())
 
-                gen_loss = F.binary_cross_entropy_with_logits(output, torch.ones_like(output))
-                div_loss = diversity_loss(fake_images)
-                total_gen_loss = gen_loss + 0.1 * div_loss  # Weight for diversity loss
+                disc_loss_real = -real_output.mean()
+                disc_loss_fake = fake_output.mean()
 
-                total_gen_loss.backward()
-                gen_optimizer.step()
+                gp = gradient_penalty(vit_gan.discriminator, real_images, fake_images)
+                disc_loss = (
+                    disc_loss_real + disc_loss_fake + 10 * gp
+                )  # 10 is the GP weight
+                disc_loss.backward()
+                disc_optimizer.step()
+
+                if disc_loss.item() < discriminator_loss_threshold:
+                    iterations = 5
+                else:
+                    iterations = 1
+
+                for _ in range(iterations):
+                    # Train Generator
+                    vit_gan.generator.zero_grad()
+                    noise = construct_noise()
+                    fake_images = vit_gan.generator(noise)
+                    output = vit_gan.discriminator(fake_images)
+
+                    gen_loss = F.binary_cross_entropy_with_logits(
+                        output, torch.ones_like(output)
+                    )
+                    div_loss = diversity_loss(fake_images)
+                    total_gen_loss = (
+                        gen_loss + 0.1 * div_loss
+                    )  # Weight for diversity loss
+
+                    total_gen_loss.backward()
+                    gen_optimizer.step()
 
                 gen_scheduler.step()
                 disc_scheduler.step()

@@ -25,6 +25,7 @@ kiwisolver
 lightning-utilities
 lmdb
 Markdown
+matplotlib
 markdown-it-py
 MarkupSafe
 matplotlib
