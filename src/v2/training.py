@@ -31,20 +31,21 @@ def run():
 
     # Hyperparameters
     img_size = 32
-    patch_size = 8
+    patch_size = 4
     in_chans = 3
-    embed_dim = 256
-    no_of_transformer_blocks = 6
-    num_heads = 6
+    embed_dim = 512
+    no_of_transformer_blocks = 12
+    num_heads = 8
     mlp_ratio = 4.0
     dropout_rate = 0.1
     batch_size = 512
     epochs = 10_000
-    generator_learning_rate = 10e-5
-    discriminator_learning_rate = 3e-5
+    generator_learning_rate = 3e-5
+    discriminator_learning_rate = 1e-5
     discriminator_loss_threshold = 1e-8
     optimizer_betas = (0.5, 0.999)
     noise_shape = in_chans, img_size, img_size
+
     disc_losses = []
     gen_losses = []
     fid_scores = []
