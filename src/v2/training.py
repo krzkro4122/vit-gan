@@ -44,6 +44,17 @@ def gradient_penalty(discriminator, real_images, fake_images):
     return _gradient_penalty
 
 
+def diversity_loss(fake_images):
+    # Example diversity loss: Penalize similar images
+    batch_size = fake_images.size(0)
+    diversity_loss = 0
+    for i in range(batch_size):
+        for j in range(i + 1, batch_size):
+            diversity_loss += torch.mean((fake_images[i] - fake_images[j]).abs())
+    diversity_loss /= (batch_size * (batch_size - 1) / 2)
+    return diversity_loss
+
+
 def run():
     construct_directories()
 
@@ -182,10 +193,12 @@ def run():
                 noise = construct_noise()
                 fake_images = vit_gan.generator(noise)
                 output = vit_gan.discriminator(fake_images)
-                gen_loss = F.binary_cross_entropy_with_logits(
-                    output, torch.ones_like(output)
-                )
-                gen_loss.backward()
+
+                gen_loss = F.binary_cross_entropy_with_logits(output, torch.ones_like(output))
+                div_loss = diversity_loss(fake_images)
+                total_gen_loss = gen_loss + 0.1 * div_loss  # Weight for diversity loss
+
+                total_gen_loss.backward()
                 gen_optimizer.step()
 
                 gen_scheduler.step()
