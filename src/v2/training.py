@@ -1,6 +1,7 @@
 import datetime
 import os
 import traceback
+from matplotlib import pyplot as plt
 import torch
 import torch.nn.functional as F
 import torchvision.transforms as transforms
@@ -13,6 +14,7 @@ from torch.optim.adam import Adam
 from torch.utils.data import DataLoader
 from torchmetrics.image.fid import FrechetInceptionDistance
 from src.v2.utils import (
+    CHECKPOINT_DIR,
     log,
     convert_to_uint8,
     construct_directories,
@@ -43,6 +45,9 @@ def run():
     discriminator_loss_threshold = 1e-8
     optimizer_betas = (0.5, 0.999)
     noise_shape = in_chans, img_size, img_size
+    disc_losses = []
+    gen_losses = []
+    fid_scores = []
 
     def construct_noise():
         return torch.randn(batch_size, *noise_shape, device=device)
@@ -169,6 +174,8 @@ def run():
                 )
                 gen_loss.backward()
                 gen_optimizer.step()
+                disc_losses.append(disc_loss.item())
+                gen_losses.append(gen_loss.item())
 
                 if i % 100 == 0:
                     with torch.no_grad():
@@ -183,6 +190,7 @@ def run():
 
                         fid_score = fid.compute().item()
                         fid.reset()
+                        fid_scores.append(fid_score)
                         disc_loss_value = disc_loss.item()
                         if disc_loss_value < discriminator_loss_threshold:
                             raise Exception(
@@ -198,6 +206,27 @@ def run():
     except Exception as e:
         log(f"{e} raised!\n{traceback.format_exc()}")
     finally:
+        # Plotting the Generator and Discriminator Loss
+        plt.figure(figsize=(10, 5))
+        plt.title("Generator and Discriminator Loss During Training")
+        plt.plot(gen_losses, label="G Loss")
+        plt.plot(disc_losses, label="D Loss")
+        plt.xlabel("Iterations")
+        plt.ylabel("Loss")
+        plt.legend()
+        plt.savefig("generator_discriminator_loss.png")  # Save the plot as an image
+        plt.close()  # Close the plot to prevent it from displaying
+
+        # Plotting the FID Score
+        plt.figure(figsize=(10, 5))
+        plt.title("FID Score During Training")
+        plt.plot(fid_scores, label="FID Score")
+        plt.xlabel("Iterations")
+        plt.ylabel("FID")
+        plt.legend()
+        plt.savefig("fid_score.png")  # Save the plot as an image
+        plt.close()  # Close the plot to prevent it from displaying
+
         model_name = "model.ckpt"
         model_path = os.path.join(SAVE_DIR, model_name)
         log(
