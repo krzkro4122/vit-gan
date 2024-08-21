@@ -188,6 +188,7 @@ def run():
                 )  # 10 is the GP weight
                 disc_loss.backward()
                 disc_optimizer.step()
+                disc_losses.append(disc_loss.item())
 
                 if disc_loss.item() < discriminator_loss_threshold:
                     iterations = 5
@@ -211,12 +212,10 @@ def run():
 
                     total_gen_loss.backward()
                     gen_optimizer.step()
+                    gen_losses.append(gen_loss.item())
 
                 gen_scheduler.step()
                 disc_scheduler.step()
-
-                disc_losses.append(disc_loss.item())
-                gen_losses.append(gen_loss.item())
 
                 if i % 100 == 0:
                     with torch.no_grad():
@@ -261,26 +260,31 @@ def run():
     except Exception as e:
         log(f"{e} raised!\n{traceback.format_exc()}")
     finally:
-        # Plotting the Generator and Discriminator Loss
-        plt.figure(figsize=(10, 5))
-        plt.title("Generator and Discriminator Loss During Training")
-        plt.plot(gen_losses, label="G Loss")
-        plt.plot(disc_losses, label="D Loss")
-        plt.xlabel("Iterations")
-        plt.ylabel("Loss")
-        plt.legend()
-        plt.savefig("generator_discriminator_loss.png")  # Save the plot as an image
-        plt.close()  # Close the plot to prevent it from displaying
-
-        # Plotting the FID Score
-        plt.figure(figsize=(10, 5))
-        plt.title("FID Score During Training")
-        plt.plot(fid_scores, label="FID Score")
-        plt.xlabel("Iterations")
-        plt.ylabel("FID")
-        plt.legend()
-        plt.savefig("fid_score.png")  # Save the plot as an image
-        plt.close()  # Close the plot to prevent it from displaying
+        if gen_losses and disc_losses:
+            # Plotting the Generator and Discriminator Loss
+            plt.figure(figsize=(10, 5))
+            plt.title("Generator and Discriminator Loss During Training")
+            plt.plot(gen_losses, label="G Loss")
+            plt.plot(disc_losses, label="D Loss")
+            plt.xlabel("Iterations")
+            plt.ylabel("Loss")
+            plt.legend()
+            plt.savefig(
+                os.path.join(SAVE_DIR, "losses.png")
+            )  # Save the plot as an image
+            plt.close()  # Close the plot to prevent it from displaying
+        if fid_scores:
+            # Plotting the FID Score
+            plt.figure(figsize=(10, 5))
+            plt.title("FID Score During Training")
+            plt.plot(fid_scores, label="FID Score")
+            plt.xlabel("Iterations")
+            plt.ylabel("FID")
+            plt.legend()
+            plt.savefig(
+                os.path.join(SAVE_DIR, "fid_score.png")
+            )  # Save the plot as an image
+            plt.close()  # Close the plot to prevent it from displaying
 
         model_name = "model.ckpt"
         model_path = os.path.join(SAVE_DIR, model_name)
