@@ -124,6 +124,10 @@ def run():
         betas=optimizer_betas,
     )
 
+    # Scheduler - Decay learning rate by 0.1 every 100 epochs
+    gen_scheduler = StepLR(gen_optimizer, step_size=100, gamma=0.1)
+    disc_scheduler = StepLR(disc_optimizer, step_size=100, gamma=0.1)
+
     fid = FrechetInceptionDistance(feature=2048).to(device)
 
     try:
@@ -180,6 +184,10 @@ def run():
                 )
                 gen_loss.backward()
                 gen_optimizer.step()
+                
+                gen_scheduler.step()
+                disc_scheduler.step()
+
                 disc_losses.append(disc_loss.item())
                 gen_losses.append(gen_loss.item())
 
