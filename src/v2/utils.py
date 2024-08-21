@@ -26,7 +26,7 @@ def log(message: str):
     timestamp = datetime.datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
     rich.print(f"{timestamp} {message}")
     with open(os.path.join(SAVE_DIR, "training.log"), "a", encoding="utf-8") as handle:
-        handle.write(f"{timestamp} {message}\n")
+        rich.print(f"{timestamp} {message}\n", file=handle)
 
 
 class ToTensorUInt8(object):
