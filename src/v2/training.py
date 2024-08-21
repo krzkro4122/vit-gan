@@ -11,6 +11,7 @@ import src.v2.modules as modules
 
 from typing import Union
 from torch.optim.adam import Adam
+from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
 from torchmetrics.image.fid import FrechetInceptionDistance
 from src.v2.utils import (
@@ -21,8 +22,6 @@ from src.v2.utils import (
     SAVE_DIR,
     START_TIME,
     IMAGES_DIR,
-    NOISE_DIR,
-    INPUT_DIR,
 )
 
 
@@ -59,13 +58,6 @@ def run():
     def save_images(save_path: str, images: torch.Tensor):
         vutils.save_image(images, save_path, nrow=8, normalize=True)
 
-    def save_noise(label: Union[str, int]):
-        noise = construct_noise()
-        save_path = os.path.join(NOISE_DIR, f"noise_epoch_{label}.png")
-        save_images(save_path, noise)
-        log(f"[{label=}] Saved noise to {SAVE_DIR}")
-        return noise
-
     def save_samples(label: Union[str, int], noise: torch.Tensor):
         with torch.no_grad():
             image_samples = vit_gan.generator(noise).detach().cpu()
@@ -73,11 +65,6 @@ def run():
             save_path = os.path.join(IMAGES_DIR, f"samples_epoch_{label}.png")
             save_images(save_path, image_samples)
         log(f"[{label=}] Saved samples to {SAVE_DIR}")
-
-    def save_input(label: Union[str, int], loaded_images: torch.Tensor):
-        save_path = os.path.join(INPUT_DIR, f"input_{label}.png")
-        save_images(images=loaded_images, save_path=save_path)
-        log(f"[{label=}] Saved input to {SAVE_DIR}")
 
     # Data loaders
     transform = transforms.Compose(
