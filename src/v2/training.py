@@ -27,8 +27,9 @@ from src.v2.utils import (
 
 
 # Define WGAN-GP loss
-def gradient_penalty(discriminator, real_images, fake_images):
-    alpha = torch.rand(real_images.size(0), 1, 1, 1, device=real_images.device)
+def gradient_penalty(discriminator, batch_size, real_images, fake_images):
+    batch_size = real_images.size(0)
+    alpha = torch.rand(batch_size, 1, 1, 1, device=real_images.device)
     interpolates = alpha * real_images + (1 - alpha) * fake_images
     interpolates.requires_grad_(True)
 
@@ -48,12 +49,12 @@ def gradient_penalty(discriminator, real_images, fake_images):
 def diversity_loss(fake_images):
     # Example diversity loss: Penalize similar images
     batch_size = fake_images.size(0)
-    diversity_loss = 0
+    _diversity_loss = 0
     for i in range(batch_size):
         for j in range(i + 1, batch_size):
-            diversity_loss += torch.mean((fake_images[i] - fake_images[j]).abs())
-    diversity_loss /= batch_size * (batch_size - 1) / 2
-    return diversity_loss
+            _diversity_loss += torch.mean((fake_images[i] - fake_images[j]).abs())
+    _diversity_loss /= batch_size * (batch_size - 1) / 2
+    return _diversity_loss
 
 
 def run():
@@ -68,7 +69,7 @@ def run():
     num_heads = 4
     mlp_ratio = 4.0
     dropout_rate = 0.1
-    batch_size = 256
+    batch_size = 512
     epochs = 10_000
     generator_learning_rate = 3e-5
     discriminator_learning_rate = 1e-5
@@ -185,7 +186,9 @@ def run():
                 disc_loss_real = -real_output.mean()
                 disc_loss_fake = fake_output.mean()
 
-                gp = gradient_penalty(vit_gan.discriminator, real_images, fake_images)
+                gp = gradient_penalty(
+                    vit_gan.discriminator, batch_size, real_images, fake_images
+                )
                 disc_loss = (
                     disc_loss_real + disc_loss_fake + 10 * gp
                 )  # 10 is the GP weight
