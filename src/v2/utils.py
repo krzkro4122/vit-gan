@@ -12,16 +12,14 @@ BASE_DIR = os.getenv("SCRATCH", ".")
 OUTPUT_DIR = os.path.join(f"{BASE_DIR}", "output")
 SAVE_DIR = os.path.join(OUTPUT_DIR, START_TIME.strftime("%Y%m%d-%H%M%S"))
 IMAGES_DIR = os.path.join(SAVE_DIR, "images")
-NOISE_DIR = os.path.join(SAVE_DIR, "noise")
-INPUT_DIR = os.path.join(SAVE_DIR, "input")
+CHECKPOINT_DIR = os.path.join(SAVE_DIR, "checkpoints")
 
 
 def construct_directories():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     os.makedirs(SAVE_DIR, exist_ok=True)
     os.makedirs(IMAGES_DIR, exist_ok=True)
-    os.makedirs(NOISE_DIR, exist_ok=True)
-    os.makedirs(INPUT_DIR, exist_ok=True)
+    os.makedirs(CHECKPOINT_DIR, exist_ok=True)
 
 
 def log(message: str):
