@@ -19,7 +19,7 @@ def construct_directories():
 
 
 def log(message: str):
-    timestamp = datetime.datetime.now().strftime("[%Y-%m-%d %H:%M:%S]")
+    timestamp = datetime.datetime.now().strftime("[%F %T.%f")[:-3] + "]"
     rich.print(f"{timestamp} {message}")
     with open(os.path.join(SAVE_DIR, "training.log"), "a", encoding="utf-8") as handle:
         rich.print(f"{timestamp} {message}", file=handle)

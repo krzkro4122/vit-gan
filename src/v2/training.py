@@ -3,6 +3,7 @@ import os
 import traceback
 import math
 from matplotlib import pyplot as plt
+import numpy as np
 import torch
 import torch.nn.functional as F
 import torchvision.transforms as transforms
@@ -11,6 +12,8 @@ import torchvision.utils as vutils
 import src.v2.modules as modules
 
 from typing import Union
+from torch import Tensor
+from torch.amp.autocast_mode import autocast
 from torch.optim.adam import Adam
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
@@ -26,60 +29,61 @@ from src.v2.utils import (
 )
 
 
-# Define WGAN-GP loss
-def gradient_penalty(discriminator, batch_size, real_images, fake_images):
-    batch_size = real_images.size(0)
-    alpha = torch.rand(batch_size, 1, 1, 1, device=real_images.device)
-    interpolates = alpha * real_images + (1 - alpha) * fake_images
-    interpolates.requires_grad_(True)
-
-    disc_interpolates = discriminator(interpolates)
-    gradients = torch.autograd.grad(
-        outputs=disc_interpolates,
-        inputs=interpolates,
-        grad_outputs=torch.ones_like(disc_interpolates),
-        create_graph=True,
-        retain_graph=True,
-    )[0]
-    gradients = gradients.view(gradients.size(0), -1)
-    _gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
-    return _gradient_penalty
-
-
 def diversity_loss(fake_images):
-    # Example diversity loss: Penalize similar images
+    # Get batch size and flatten images
     batch_size = fake_images.size(0)
-    _diversity_loss = 0
-    for i in range(batch_size):
-        for j in range(i + 1, batch_size):
-            _diversity_loss += torch.mean((fake_images[i] - fake_images[j]).abs())
-    _diversity_loss /= batch_size * (batch_size - 1) / 2
+    fake_images_flat = fake_images.view(batch_size, -1)
+
+    # Calculate the pairwise absolute differences
+    diffs = torch.cdist(fake_images_flat, fake_images_flat, p=1)
+
+    # Sum all pairwise differences and normalize
+    _diversity_loss = diffs.sum() / (batch_size * (batch_size - 1))
+
     return _diversity_loss
 
 
 def run():
     construct_directories()
 
-    # Hyperparameters
-    img_size = 32
-    patch_size = 4
-    in_chans = 3
-    embed_dim = 256
-    no_of_transformer_blocks = 12
-    num_heads = 8
-    mlp_ratio = 4.0
-    dropout_rate = 0.1
-    batch_size = 256
-    epochs = 10_000
-    generator_learning_rate = 3e-5
-    discriminator_learning_rate = 1e-5
-    discriminator_loss_threshold = 0.3
-    optimizer_betas = (0.5, 0.999)
-    noise_shape = in_chans, img_size, img_size
+    if os.getenv("DEV", "0"):
+        # Production Hyperparameters
+        img_size = 32
+        patch_size = 4
+        in_chans = 3
+        embed_dim = 256
+        no_of_transformer_blocks = 12
+        num_heads = 8
+        mlp_ratio = 4.0
+        dropout_rate = 0.1
+        batch_size = 256
+        epochs = 10_000
+        generator_learning_rate = 3e-5
+        discriminator_learning_rate = 1e-5
+        discriminator_loss_threshold = 0.3
+        optimizer_betas = (0.5, 0.999)
+        noise_shape = in_chans, img_size, img_size
+    else:
+        # Development Hyperparameters
+        img_size = 32
+        patch_size = 4
+        in_chans = 3
+        embed_dim = 64
+        no_of_transformer_blocks = 12
+        num_heads = 8
+        mlp_ratio = 4.0
+        dropout_rate = 0.1
+        batch_size = 64
+        epochs = 100
+        generator_learning_rate = 3e-5
+        discriminator_learning_rate = 1e-5
+        discriminator_loss_threshold = 0.3
+        optimizer_betas = (0.5, 0.999)
+        noise_shape = in_chans, img_size, img_size
 
-    disc_losses = []
-    gen_losses = []
-    fid_scores = []
+    disc_losses = np.array([])
+    gen_losses = np.array([])
+    fid_scores = np.array([])
 
     def construct_noise():
         return torch.randn(batch_size, *noise_shape, device=device)
@@ -123,6 +127,7 @@ def run():
         train_dataset, batch_size=batch_size, shuffle=True, num_workers=2
     )
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     # Initialize ViTGAN
     vit_gan = modules.ViTGAN(
         img_size,
@@ -183,18 +188,16 @@ def run():
                 fake_images = vit_gan.generator(noise)
                 fake_output = vit_gan.discriminator(fake_images.detach())
 
-                disc_loss_real = -real_output.mean()
-                disc_loss_fake = fake_output.mean()
-
-                gp = gradient_penalty(
-                    vit_gan.discriminator, batch_size, real_images, fake_images
+                disc_loss_real = F.binary_cross_entropy_with_logits(
+                    real_output, torch.ones_like(real_output)
                 )
-                disc_loss = (
-                    disc_loss_real + disc_loss_fake + 10 * gp
-                )  # 10 is the GP weight
+                disc_loss_fake = F.binary_cross_entropy_with_logits(
+                    fake_output, torch.zeros_like(fake_output)
+                )
+                disc_loss = disc_loss_real + disc_loss_fake
                 disc_loss.backward()
                 disc_optimizer.step()
-                disc_losses.append(disc_loss.item())
+                np.append(disc_losses, disc_loss.item())
 
                 if disc_loss.item() < discriminator_loss_threshold:
                     iterations = 5
@@ -218,7 +221,7 @@ def run():
 
                     total_gen_loss.backward()
                     gen_optimizer.step()
-                    gen_losses.append(gen_loss.item())
+                    np.append(gen_losses, gen_loss.item())
 
                 gen_scheduler.step()
                 disc_scheduler.step()
@@ -236,18 +239,20 @@ def run():
 
                         fid_score = fid.compute().item()
                         fid.reset()
-                        fid_scores.append(fid_score)
+                        np.append(fid_scores, fid_score)
                         disc_loss_value = disc_loss.item()
                         if disc_loss_value < discriminator_loss_threshold:
                             raise Exception(
                                 f"The disc loss got really small! ({disc_loss_value}) Stopping training"
                             )
                         log(
-                            f"Epoch [{epoch+1}/{epochs}], Step [{i}/{len(train_loader)}] | "
+                            f"Epoch [{epoch}/{epochs}], Step [{i}/{len(train_loader)}] | "
                             f"Disc Loss: {disc_loss_value:.8f}, Gen Loss: {gen_loss.item():.4f} | "
                             f"FID: {fid_score:.4f}"
                         )
-                if i % 1000 == 0:  # Save every 1000 steps
+                if os.getenv("DEV", "1") == "1" and i % 50 == 0:
+                    log(f"Epoch [{epoch}/{epochs}], Step [{i}/{len(train_loader)}]")
+                if (i + 1) % 1000 == 0:  # Save every 1000 steps
                     torch.save(
                         {
                             "epoch": epoch,
