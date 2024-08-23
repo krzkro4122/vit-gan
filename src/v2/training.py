@@ -51,12 +51,12 @@ def run():
         img_size = 32
         patch_size = 4
         in_chans = 3
-        embed_dim = 256
-        no_of_transformer_blocks = 12
-        num_heads = 8
+        embed_dim = 2048
+        no_of_transformer_blocks = 6
+        num_heads = 4
         mlp_ratio = 4.0
-        dropout_rate = 0.1
-        batch_size = 256
+        dropout_rate = 0.3
+        batch_size = 2048
         epochs = 10_000
         generator_learning_rate = 3e-5
         discriminator_learning_rate = 1e-5
