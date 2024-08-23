@@ -12,8 +12,6 @@ import torchvision.utils as vutils
 import src.v2.modules as modules
 
 from typing import Union
-from torch import Tensor
-from torch.amp.autocast_mode import autocast
 from torch.optim.adam import Adam
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
@@ -51,7 +49,7 @@ def run():
         img_size = 32
         patch_size = 4
         in_chans = 3
-        embed_dim = 512
+        embed_dim = 256
         no_of_transformer_blocks = 3
         num_heads = 4
         mlp_ratio = 4.0
