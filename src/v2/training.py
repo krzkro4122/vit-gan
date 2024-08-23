@@ -26,7 +26,6 @@ from src.v2.utils import (
     IMAGES_DIR,
 )
 
-
 def diversity_loss(fake_images):
     # Get batch size and flatten images
     batch_size = fake_images.size(0)
@@ -42,6 +41,7 @@ def diversity_loss(fake_images):
 
 
 def run():
+    torch.cuda.empty_cache()
     construct_directories()
 
     if os.getenv("DEV", "0"):
