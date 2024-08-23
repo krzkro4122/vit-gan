@@ -26,6 +26,7 @@ from src.v2.utils import (
     IMAGES_DIR,
 )
 
+
 def diversity_loss(fake_images):
     # Get batch size and flatten images
     batch_size = fake_images.size(0)
@@ -49,12 +50,12 @@ def run():
         img_size = 32
         patch_size = 4
         in_chans = 3
-        embed_dim = 256
+        embed_dim = 216
         no_of_transformer_blocks = 3
-        num_heads = 4
+        num_heads = 6
         mlp_ratio = 4.0
         dropout_rate = 0.3
-        batch_size = 2048
+        batch_size = 512
         epochs = 1000
         generator_learning_rate = 3e-5
         discriminator_learning_rate = 1e-5
@@ -66,9 +67,9 @@ def run():
         img_size = 32
         patch_size = 4
         in_chans = 3
-        embed_dim = 64
-        no_of_transformer_blocks = 12
-        num_heads = 8
+        embed_dim = 36
+        no_of_transformer_blocks = 3
+        num_heads = 6
         mlp_ratio = 4.0
         dropout_rate = 0.1
         batch_size = 64
