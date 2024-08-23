@@ -51,7 +51,7 @@ def run():
         img_size = 32
         patch_size = 4
         in_chans = 3
-        embed_dim = 2048
+        embed_dim = 512
         no_of_transformer_blocks = 6
         num_heads = 4
         mlp_ratio = 4.0
