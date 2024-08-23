@@ -249,7 +249,7 @@ def run():
                             f"Disc Loss: {disc_loss_value:.8f}, Gen Loss: {gen_loss.item():.4f} | "
                             f"FID: {fid_score:.4f}"
                         )
-                if os.getenv("DEV", "1") == "1" and i % 50 == 0:
+                if os.getenv("DEV", "1") == "1" and i % 50 == 0 and i % 100 != 0:
                     log(f"Epoch [{epoch}/{epochs}], Step [{i}/{len(train_loader)}]")
                 if (i + 1) % 1000 == 0:  # Save every 1000 steps
                     torch.save(
