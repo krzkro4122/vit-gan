@@ -344,9 +344,10 @@ def run():
             plt.savefig(os.path.join(SAVE_DIR, "fid_score.png"))
             plt.close()
 
+        model_path = os.path.join(SAVE_DIR, "final_model.ckpt")
         log(
             f"Run took {str(datetime.datetime.now() - START_TIME)}. Saving the model to: {model_path}"
         )
-        torch.save(vit_gan.state_dict(), os.path.join(SAVE_DIR, "final_model.ckpt"))
+        torch.save(vit_gan.state_dict(), model_path)
         noise = construct_noise()
         save_samples(label=epoch, noise=noise)
