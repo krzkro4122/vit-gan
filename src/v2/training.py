@@ -63,7 +63,7 @@ def run():
     noise_shape = in_chans, img_size, img_size
     weight_decay = 0.1
 
-    if os.getenv("DEV", "1"):
+    if os.getenv("DEV", "0") == "1":
         # Development Hyperparameters
         embed_dim = 36
         no_of_transformer_blocks = 3
@@ -244,8 +244,6 @@ def run():
                             f"Disc Loss: {disc_loss_value:.8f}, Gen Loss: {gen_loss.item():.4f} | "
                             f"FID: {fid_score:.4f}"
                         )
-                if os.getenv("DEV", "1") == "1" and i % 50 == 0 and i % 100 != 0:
-                    log(f"Epoch [{epoch}/{epochs}], Step [{i}/{len(train_loader)}]")
                 if (i + 1) % 1000 == 0:  # Save every 1000 steps
                     torch.save(
                         {
