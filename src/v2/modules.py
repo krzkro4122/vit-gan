@@ -80,6 +80,7 @@ class TransformerBlock(nn.Module):
         self.mlp = MLP(
             dim, hidden_features=int(dim * mlp_ratio), dropout_rate=dropout_rate
         )
+        self.noise_std = noise_std
 
     def forward(self, x):
         x = x + self.attn(self.norm1(x))
