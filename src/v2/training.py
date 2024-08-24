@@ -176,6 +176,8 @@ def run():
                 real_images = real_images.to(device)
 
                 # Train Discriminator with WGAN-GP loss
+                disc_optimizer.zero_grad()
+
                 real_output = vit_gan.discriminator(real_images)
                 fake_images = vit_gan.generator(noise)
                 fake_output = vit_gan.discriminator(fake_images.detach())
@@ -189,6 +191,7 @@ def run():
                 disc_loss = disc_loss_real + disc_loss_fake
                 disc_loss.backward()
                 disc_optimizer.step()
+
                 np.append(disc_losses, disc_loss.item())
 
                 if disc_loss.item() < discriminator_loss_threshold:
@@ -198,7 +201,8 @@ def run():
 
                 for _ in range(iterations):
                     # Train Generator
-                    vit_gan.generator.zero_grad()
+                    gen_optimizer.zero_grad()
+
                     noise = construct_noise()
                     fake_images = vit_gan.generator(noise)
                     output = vit_gan.discriminator(fake_images)
@@ -213,6 +217,7 @@ def run():
 
                     total_gen_loss.backward()
                     gen_optimizer.step()
+
                     np.append(gen_losses, gen_loss.item())
 
                 gen_scheduler.step()
