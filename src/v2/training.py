@@ -93,7 +93,7 @@ def run():
     mlp_ratio = 4.0
     dropout_rate = 0.1
     batch_size = 512
-    epochs = 500
+    epochs = 10_000
     generator_learning_rate = 1e-4
     discriminator_learning_rate = 4e-5
     discriminator_loss_threshold = 0.3
