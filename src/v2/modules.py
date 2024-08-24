@@ -72,7 +72,7 @@ class MLP(nn.Module):
 
 
 class TransformerBlock(nn.Module):
-    def __init__(self, dim, num_heads, mlp_ratio=4.0, dropout_rate=0.0):
+    def __init__(self, dim, num_heads, mlp_ratio=4.0, dropout_rate=0.0, noise_std=0.1):
         super().__init__()
         self.norm1 = nn.LayerNorm(dim)
         self.attn = Attention(dim, num_heads)
@@ -84,6 +84,9 @@ class TransformerBlock(nn.Module):
     def forward(self, x):
         x = x + self.attn(self.norm1(x))
         x = x + self.mlp(self.norm2(x))
+        if self.training:  # Inject noise only during training
+            noise = torch.randn_like(x) * self.noise_std
+            x = x + noise
         return x
 
 
