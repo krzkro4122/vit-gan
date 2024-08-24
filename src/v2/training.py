@@ -44,18 +44,18 @@ class MovingAverage:
 
 
 class EarlyStopping:
-    def __init__(self, patience=10, min_delta=0.001):
+    def __init__(self, patience=20, min_delta=5.0):
         self.patience = patience
         self.min_delta = min_delta
         self.counter = 0
-        self.best_loss = None
+        self.best_score = None
 
-    def should_stop(self, current_loss):
-        if self.best_loss is None:
-            self.best_loss = current_loss
+    def should_stop(self, current_score: float) -> bool:
+        if self.best_score is None:
+            self.best_score = current_score
             return False
-        elif current_loss < self.best_loss - self.min_delta:
-            self.best_loss = current_loss
+        elif current_score < self.best_score - self.min_delta:
+            self.best_score = current_score
             self.counter = 0
             return False
         else:
@@ -108,7 +108,6 @@ def run():
         num_heads = 6
         batch_size = 64
         epochs = 100
-
 
     best_fid_score = float("inf")
     disc_losses = []
@@ -190,7 +189,7 @@ def run():
 
     # Initialize moving average and early stopping
     disc_loss_ma = MovingAverage(alpha=0.9)
-    early_stopping = EarlyStopping(patience=10, min_delta=0.001)
+    early_stopping = EarlyStopping(patience=10, min_delta=5.0)
 
     try:
         log(f"Starting training at: {str(datetime.datetime.now())}")
@@ -212,14 +211,13 @@ def run():
             f"  {noise_shape=} "
             f"  {discriminator_loss_threshold=} "
         )
-        # Training Loop
         for epoch in range(epochs):
             noise = construct_noise()
             save_samples(label=epoch, noise=noise)
             for i, (real_images, _) in enumerate(train_loader):
                 real_images = real_images.to(device)
 
-                # Train Discriminator with WGAN-GP loss
+                # Train Discriminator
                 disc_optimizer.zero_grad()
                 noise = construct_noise()
                 fake_images = vit_gan.generator(noise)
@@ -244,19 +242,12 @@ def run():
                 disc_loss_ma.update(disc_loss.item())
                 disc_losses.append(disc_loss.item())
 
-                # Early stopping check
-                if early_stopping.should_stop(disc_loss.item()):
-                    log(f"Early stopping triggered at epoch {epoch}, step {i}")
-                    break
-
-                # Adaptive generator training frequency based on moving average
-                if disc_loss_ma.get() < discriminator_loss_threshold:
-                    iterations = 5
-                else:
-                    iterations = 1
+                # Adaptive generator training frequency
+                iterations = (
+                    5 if disc_loss_ma.get() < discriminator_loss_threshold else 1
+                )
 
                 for _ in range(iterations):
-                    # Train Generator
                     gen_optimizer.zero_grad()
                     noise = construct_noise()
                     fake_images = vit_gan.generator(noise)
@@ -278,25 +269,7 @@ def run():
 
                     gen_losses.append(gen_loss.item())
 
-                # After each epoch or batch:
-                if fid_score < best_fid_score:
-                    best_fid_score = fid_score
-                    torch.save(
-                        {
-                            "epoch": epoch,
-                            "batch": i,
-                            "vit_gan_state_dict": vit_gan.state_dict(),
-                            "gen_optimizer_state_dict": gen_optimizer.state_dict(),
-                            "disc_optimizer_state_dict": disc_optimizer.state_dict(),
-                            "gen_loss": gen_loss,
-                            "disc_loss": disc_loss,
-                        },
-                        os.path.join(
-                            CHECKPOINT_DIR, f"checkpoint_epoch_{epoch}_step_{i}.pth"
-                        ),
-                    )
-
-                if i % (batch_size // 2) == 0:
+                if i % (len(train_loader) // 20) == 0:
                     # Step learning rate schedulers
                     gen_scheduler.step()
                     disc_scheduler.step()
@@ -314,9 +287,34 @@ def run():
                         fid_score = fid.compute().item()
                         fid.reset()
                         fid_scores.append(fid_score)
-                        disc_loss_value = disc_loss.item()
+
+                        # Check for early stopping based on FID
+                        if early_stopping.should_stop(fid_score):
+                            log(
+                                f"Early stopping triggered at epoch {epoch}, step {i}, ({fid_score=})"
+                            )
+                            break
+
+                        # Save best model based on FID
+                        if fid_score < best_fid_score:
+                            best_fid_score = fid_score
+                            torch.save(
+                                {
+                                    "epoch": epoch,
+                                    "batch": i,
+                                    "vit_gan_state_dict": vit_gan.state_dict(),
+                                    "gen_optimizer_state_dict": gen_optimizer.state_dict(),
+                                    "disc_optimizer_state_dict": disc_optimizer.state_dict(),
+                                    "gen_loss": gen_loss,
+                                    "disc_loss": disc_loss,
+                                },
+                                os.path.join(
+                                    CHECKPOINT_DIR,
+                                    f"checkpoint_epoch_{epoch}_step_{i}_best_fid.pth",
+                                ),
+                            )
                         log(
-                            f"Epoch [{epoch}/{epochs}], Step [{i}/{len(train_loader)}] | Disc Loss: {disc_loss_value:.8f}, Gen Loss: {gen_loss.item():.4f} | FID: {fid_score:.4f}"
+                            f"Epoch [{epoch}/{epochs}], Step [{i}/{len(train_loader)}] | Disc Loss: {disc_loss.item():.8f}, Gen Loss: {gen_loss.item():.4f} | FID: {fid_score:.4f}"
                         )
 
     except KeyboardInterrupt as ke:
@@ -324,8 +322,8 @@ def run():
     except Exception as e:
         log(f"{e} raised!\n{traceback.format_exc()}")
     finally:
-        if len(gen_losses) > 0 and len(disc_losses) > 0:
-            # Plotting the Generator and Discriminator Loss
+        # Final cleanup and saving
+        if gen_losses and disc_losses:
             plt.figure(figsize=(10, 5))
             plt.title("Generator and Discriminator Loss During Training")
             plt.plot(gen_losses, label="G Loss")
@@ -333,28 +331,22 @@ def run():
             plt.xlabel("Iterations")
             plt.ylabel("Loss")
             plt.legend()
-            plt.savefig(
-                os.path.join(SAVE_DIR, "losses.png")
-            )  # Save the plot as an image
-            plt.close()  # Close the plot to prevent it from displaying
-        if len(fid_scores) > 0:
-            # Plotting the FID Score
+            plt.savefig(os.path.join(SAVE_DIR, "losses.png"))
+            plt.close()
+
+        if fid_scores:
             plt.figure(figsize=(10, 5))
             plt.title("FID Score During Training")
             plt.plot(fid_scores, label="FID Score")
             plt.xlabel("Iterations")
             plt.ylabel("FID")
             plt.legend()
-            plt.savefig(
-                os.path.join(SAVE_DIR, "fid_score.png")
-            )  # Save the plot as an image
-            plt.close()  # Close the plot to prevent it from displaying
+            plt.savefig(os.path.join(SAVE_DIR, "fid_score.png"))
+            plt.close()
 
-        model_name = "model.ckpt"
-        model_path = os.path.join(SAVE_DIR, model_name)
         log(
             f"Run took {str(datetime.datetime.now() - START_TIME)}. Saving the model to: {model_path}"
         )
-        torch.save(vit_gan.state_dict(), model_path)
+        torch.save(vit_gan.state_dict(), os.path.join(SAVE_DIR, "final_model.ckpt"))
         noise = construct_noise()
         save_samples(label=epoch, noise=noise)
