@@ -109,9 +109,11 @@ def run():
         batch_size = 64
         epochs = 100
 
-    disc_losses = np.array([])
-    gen_losses = np.array([])
-    fid_scores = np.array([])
+
+    best_fid_score = float("inf")
+    disc_losses = []
+    gen_losses = []
+    fid_scores = []
 
     def construct_noise():
         return torch.randn(batch_size, *noise_shape, device=device)
@@ -152,7 +154,7 @@ def run():
         transform=transform,
     )
     train_loader = DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True, num_workers=2
+        train_dataset, batch_size=batch_size, shuffle=True, num_workers=8
     )
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -240,7 +242,7 @@ def run():
 
                 # Update moving average of discriminator loss
                 disc_loss_ma.update(disc_loss.item())
-                disc_losses = np.append(disc_losses, disc_loss.item())
+                disc_losses.append(disc_loss.item())
 
                 # Early stopping check
                 if early_stopping.should_stop(disc_loss.item()):
@@ -274,9 +276,31 @@ def run():
                     total_gen_loss.backward()
                     gen_optimizer.step()
 
-                    gen_losses = np.append(gen_losses, gen_loss.item())
+                    gen_losses.append(gen_loss.item())
 
-                if i % 100 == 0:
+                # After each epoch or batch:
+                if fid_score < best_fid_score:
+                    best_fid_score = fid_score
+                    torch.save(
+                        {
+                            "epoch": epoch,
+                            "batch": i,
+                            "vit_gan_state_dict": vit_gan.state_dict(),
+                            "gen_optimizer_state_dict": gen_optimizer.state_dict(),
+                            "disc_optimizer_state_dict": disc_optimizer.state_dict(),
+                            "gen_loss": gen_loss,
+                            "disc_loss": disc_loss,
+                        },
+                        os.path.join(
+                            CHECKPOINT_DIR, f"checkpoint_epoch_{epoch}_step_{i}.pth"
+                        ),
+                    )
+
+                if i % (batch_size // 2) == 0:
+                    # Step learning rate schedulers
+                    gen_scheduler.step()
+                    disc_scheduler.step()
+
                     with torch.no_grad():
                         noise = construct_noise()
                         fake_images = vit_gan.generator(noise).detach()
@@ -289,28 +313,11 @@ def run():
 
                         fid_score = fid.compute().item()
                         fid.reset()
-                        fid_scores = np.append(fid_scores, fid_score)
+                        fid_scores.append(fid_score)
                         disc_loss_value = disc_loss.item()
                         log(
                             f"Epoch [{epoch}/{epochs}], Step [{i}/{len(train_loader)}] | Disc Loss: {disc_loss_value:.8f}, Gen Loss: {gen_loss.item():.4f} | FID: {fid_score:.4f}"
                         )
-                if (i + 1) % 1000 == 0:  # Save every 1000 steps
-                    torch.save(
-                        {
-                            "epoch": epoch,
-                            "generator_state_dict": vit_gan.generator.state_dict(),
-                            "discriminator_state_dict": vit_gan.discriminator.state_dict(),
-                            "gen_optimizer_state_dict": gen_optimizer.state_dict(),
-                            "disc_optimizer_state_dict": disc_optimizer.state_dict(),
-                            "loss": gen_loss,
-                        },
-                        os.path.join(
-                            CHECKPOINT_DIR, f"checkpoint_epoch_{epoch}_step_{i}.pth"
-                        ),
-                    )
-            # Step learning rate schedulers
-            gen_scheduler.step()
-            disc_scheduler.step()
 
     except KeyboardInterrupt as ke:
         log(f"{ke} raised!")
