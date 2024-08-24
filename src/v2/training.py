@@ -15,9 +15,6 @@ from typing import Union
 from torch.optim.adam import Adam
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
-import torchmetrics
-import torchmetrics.image.inception as inception
-from torchmetrics.image.inception import InceptionScore
 from torchmetrics.image.fid import FrechetInceptionDistance
 from src.v2.utils import (
     CHECKPOINT_DIR,
@@ -152,7 +149,6 @@ def run():
     disc_scheduler = StepLR(disc_optimizer, step_size=100, gamma=0.1)
 
     fid = FrechetInceptionDistance(feature=2048).to(device)
-    inception_score = InceptionScore(feature=2048, device=device).to(device)
 
     try:
         log(f"Starting training at: {str(datetime.datetime.now())}")
@@ -229,13 +225,6 @@ def run():
                         noise = construct_noise()
                         fake_images = vit_gan.generator(noise).detach()
 
-                        # Inception Score computation
-                        inception_score.update(fake_images)
-                        is_score = inception_score.compute()[0].item()
-                        inception_score.reset()
-                        np.append(is_scores, is_score)
-
-                        # FID computation
                         real_images_uint8 = convert_to_uint8(real_images)
                         fake_images_uint8 = convert_to_uint8(fake_images)
 
@@ -245,14 +234,18 @@ def run():
                         fid_score = fid.compute().item()
                         fid.reset()
                         np.append(fid_scores, fid_score)
-
-                        # Log metrics
                         disc_loss_value = disc_loss.item()
+                        if disc_loss_value < discriminator_loss_threshold:
+                            raise Exception(
+                                f"The disc loss got really small! ({disc_loss_value}) Stopping training"
+                            )
                         log(
                             f"Epoch [{epoch}/{epochs}], Step [{i}/{len(train_loader)}] | "
                             f"Disc Loss: {disc_loss_value:.8f}, Gen Loss: {gen_loss.item():.4f} | "
-                            f"FID: {fid_score:.4f}, IS: {is_score:.4f}"
+                            f"FID: {fid_score:.4f}"
                         )
+                if os.getenv("DEV", "1") == "1" and i % 50 == 0 and i % 100 != 0:
+                    log(f"Epoch [{epoch}/{epochs}], Step [{i}/{len(train_loader)}]")
                 if (i + 1) % 1000 == 0:  # Save every 1000 steps
                     torch.save(
                         {
@@ -297,16 +290,6 @@ def run():
                 os.path.join(SAVE_DIR, "fid_score.png")
             )  # Save the plot as an image
             plt.close()  # Close the plot to prevent it from displaying
-        if is_scores:
-            # Plotting the IS Score
-            plt.figure(figsize=(10, 5))
-            plt.title("Inception Score During Training")
-            plt.plot(is_scores, label="IS Score")
-            plt.xlabel("Iterations")
-            plt.ylabel("Inception Score")
-            plt.legend()
-            plt.savefig(os.path.join(SAVE_DIR, "inception_score.png"))
-            plt.close()
 
         model_name = "model.ckpt"
         model_path = os.path.join(SAVE_DIR, model_name)
