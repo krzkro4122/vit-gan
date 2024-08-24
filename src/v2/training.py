@@ -49,28 +49,27 @@ def run():
     img_size = 32
     patch_size = 4
     in_chans = 3
-    embed_dim = 216
-    no_of_transformer_blocks = 3
+    embed_dim = 192
+    no_of_transformer_blocks = 6
     num_heads = 6
-    mlp_ratio = 2.0
-    dropout_rate = 0.2
-    batch_size = 1024
-    epochs = 1000
-    generator_learning_rate = 6e-5
-    discriminator_learning_rate = 2e-5
+    mlp_ratio = 4.0
+    dropout_rate = 0.1
+    batch_size = 512
+    epochs = 500
+    generator_learning_rate = 1e-4
+    discriminator_learning_rate = 4e-5
     discriminator_loss_threshold = 0.3
     optimizer_betas = (0.5, 0.999)
     noise_shape = in_chans, img_size, img_size
-    weight_decay = 0.1
+    weight_decay = 1e-4
 
     if os.getenv("DEV", "0") == "1":
         # Development Hyperparameters
-        embed_dim = 36
-        no_of_transformer_blocks = 3
+        embed_dim = 192
+        no_of_transformer_blocks = 6
         num_heads = 6
         batch_size = 64
         epochs = 100
-        weight_decay = 0.1
 
     disc_losses = np.array([])
     gen_losses = np.array([])
