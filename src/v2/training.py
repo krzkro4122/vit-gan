@@ -9,9 +9,10 @@ import torch.nn.functional as F
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.utils as vutils
+import torch.nn.utils as utils
 import src.v2.modules as modules
 
-from typing import Union
+from typing import Optional, Union
 from torch.optim.adam import Adam
 from torch.optim.lr_scheduler import StepLR
 from torch.utils.data import DataLoader
@@ -25,6 +26,43 @@ from src.v2.utils import (
     START_TIME,
     IMAGES_DIR,
 )
+
+
+class MovingAverage:
+    def __init__(self, alpha=0.9):
+        self.alpha = alpha
+        self.value: Optional[float] = None
+
+    def update(self, new_value: float):
+        if self.value is None:
+            self.value = new_value
+        else:
+            self.value = self.alpha * self.value + (1 - self.alpha) * new_value
+
+    def get(self) -> float:
+        return self.value if self.value is not None else 0.0
+
+
+class EarlyStopping:
+    def __init__(self, patience=10, min_delta=0.001):
+        self.patience = patience
+        self.min_delta = min_delta
+        self.counter = 0
+        self.best_loss = None
+
+    def should_stop(self, current_loss):
+        if self.best_loss is None:
+            self.best_loss = current_loss
+            return False
+        elif current_loss < self.best_loss - self.min_delta:
+            self.best_loss = current_loss
+            self.counter = 0
+            return False
+        else:
+            self.counter += 1
+            if self.counter >= self.patience:
+                return True
+            return False
 
 
 def diversity_loss(fake_images):
@@ -148,6 +186,10 @@ def run():
 
     fid = FrechetInceptionDistance(feature=2048).to(device)
 
+    # Initialize moving average and early stopping
+    disc_loss_ma = MovingAverage(alpha=0.9)
+    early_stopping = EarlyStopping(patience=10, min_delta=0.001)
+
     try:
         log(f"Starting training at: {str(datetime.datetime.now())}")
         log(
@@ -177,9 +219,9 @@ def run():
 
                 # Train Discriminator with WGAN-GP loss
                 disc_optimizer.zero_grad()
-
-                real_output = vit_gan.discriminator(real_images)
+                noise = construct_noise()
                 fake_images = vit_gan.generator(noise)
+                real_output = vit_gan.discriminator(real_images)
                 fake_output = vit_gan.discriminator(fake_images.detach())
 
                 disc_loss_real = F.binary_cross_entropy_with_logits(
@@ -189,12 +231,24 @@ def run():
                     fake_output, torch.zeros_like(fake_output)
                 )
                 disc_loss = disc_loss_real + disc_loss_fake
+
+                # Gradient clipping
+                utils.clip_grad_norm_(vit_gan.discriminator.parameters(), max_norm=1.0)
+
                 disc_loss.backward()
                 disc_optimizer.step()
 
-                np.append(disc_losses, disc_loss.item())
+                # Update moving average of discriminator loss
+                disc_loss_ma.update(disc_loss.item())
+                disc_losses = np.append(disc_losses, disc_loss.item())
 
-                if disc_loss.item() < discriminator_loss_threshold:
+                # Early stopping check
+                if early_stopping.should_stop(disc_loss.item()):
+                    log(f"Early stopping triggered at epoch {epoch}, step {i}")
+                    break
+
+                # Adaptive generator training frequency based on moving average
+                if disc_loss_ma.get() < discriminator_loss_threshold:
                     iterations = 5
                 else:
                     iterations = 1
@@ -202,7 +256,6 @@ def run():
                 for _ in range(iterations):
                     # Train Generator
                     gen_optimizer.zero_grad()
-
                     noise = construct_noise()
                     fake_images = vit_gan.generator(noise)
                     output = vit_gan.discriminator(fake_images)
@@ -215,13 +268,13 @@ def run():
                         gen_loss + 0.1 * div_loss
                     )  # Weight for diversity loss
 
+                    # Gradient clipping
+                    utils.clip_grad_norm_(vit_gan.generator.parameters(), max_norm=1.0)
+
                     total_gen_loss.backward()
                     gen_optimizer.step()
 
-                    np.append(gen_losses, gen_loss.item())
-
-                gen_scheduler.step()
-                disc_scheduler.step()
+                    gen_losses = np.append(gen_losses, gen_loss.item())
 
                 if i % 100 == 0:
                     with torch.no_grad():
@@ -236,16 +289,10 @@ def run():
 
                         fid_score = fid.compute().item()
                         fid.reset()
-                        np.append(fid_scores, fid_score)
+                        fid_scores = np.append(fid_scores, fid_score)
                         disc_loss_value = disc_loss.item()
-                        if disc_loss_value < discriminator_loss_threshold:
-                            raise Exception(
-                                f"The disc loss got really small! ({disc_loss_value}) Stopping training"
-                            )
                         log(
-                            f"Epoch [{epoch}/{epochs}], Step [{i}/{len(train_loader)}] | "
-                            f"Disc Loss: {disc_loss_value:.8f}, Gen Loss: {gen_loss.item():.4f} | "
-                            f"FID: {fid_score:.4f}"
+                            f"Epoch [{epoch}/{epochs}], Step [{i}/{len(train_loader)}] | Disc Loss: {disc_loss_value:.8f}, Gen Loss: {gen_loss.item():.4f} | FID: {fid_score:.4f}"
                         )
                 if (i + 1) % 1000 == 0:  # Save every 1000 steps
                     torch.save(
@@ -261,12 +308,16 @@ def run():
                             CHECKPOINT_DIR, f"checkpoint_epoch_{epoch}_step_{i}.pth"
                         ),
                     )
+            # Step learning rate schedulers
+            gen_scheduler.step()
+            disc_scheduler.step()
+
     except KeyboardInterrupt as ke:
         log(f"{ke} raised!")
     except Exception as e:
         log(f"{e} raised!\n{traceback.format_exc()}")
     finally:
-        if gen_losses and disc_losses:
+        if len(gen_losses) > 0 and len(disc_losses) > 0:
             # Plotting the Generator and Discriminator Loss
             plt.figure(figsize=(10, 5))
             plt.title("Generator and Discriminator Loss During Training")
@@ -279,7 +330,7 @@ def run():
                 os.path.join(SAVE_DIR, "losses.png")
             )  # Save the plot as an image
             plt.close()  # Close the plot to prevent it from displaying
-        if fid_scores:
+        if len(fid_scores) > 0:
             # Plotting the FID Score
             plt.figure(figsize=(10, 5))
             plt.title("FID Score During Training")
