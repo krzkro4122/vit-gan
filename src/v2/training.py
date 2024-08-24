@@ -45,44 +45,37 @@ def run():
     torch.cuda.empty_cache()
     construct_directories()
 
-    if os.getenv("DEV", "0"):
-        # Production Hyperparameters
-        img_size = 32
-        patch_size = 4
-        in_chans = 3
-        embed_dim = 216
-        no_of_transformer_blocks = 3
-        num_heads = 6
-        mlp_ratio = 4.0
-        dropout_rate = 0.3
-        batch_size = 1024
-        epochs = 1000
-        generator_learning_rate = 3e-5
-        discriminator_learning_rate = 1e-5
-        discriminator_loss_threshold = 0.3
-        optimizer_betas = (0.5, 0.999)
-        noise_shape = in_chans, img_size, img_size
-    else:
+    # Production Hyperparameters
+    img_size = 32
+    patch_size = 4
+    in_chans = 3
+    embed_dim = 216
+    no_of_transformer_blocks = 3
+    num_heads = 6
+    mlp_ratio = 4.0
+    dropout_rate = 0.3
+    batch_size = 1024
+    epochs = 1000
+    generator_learning_rate = 3e-5
+    discriminator_learning_rate = 1e-5
+    discriminator_loss_threshold = 0.3
+    optimizer_betas = (0.5, 0.999)
+    noise_shape = in_chans, img_size, img_size
+    weight_decay = 0.1
+
+    if os.getenv("DEV", "1"):
         # Development Hyperparameters
-        img_size = 32
-        patch_size = 4
-        in_chans = 3
         embed_dim = 36
         no_of_transformer_blocks = 3
         num_heads = 6
-        mlp_ratio = 4.0
-        dropout_rate = 0.1
         batch_size = 64
         epochs = 100
-        generator_learning_rate = 3e-5
-        discriminator_learning_rate = 1e-5
-        discriminator_loss_threshold = 0.3
-        optimizer_betas = (0.5, 0.999)
-        noise_shape = in_chans, img_size, img_size
+        weight_decay = 0.1
 
     disc_losses = np.array([])
     gen_losses = np.array([])
     fid_scores = np.array([])
+    is_scores = np.array([])
 
     def construct_noise():
         return torch.randn(batch_size, *noise_shape, device=device)
@@ -142,11 +135,13 @@ def run():
         vit_gan.generator.parameters(),
         lr=generator_learning_rate,
         betas=optimizer_betas,
+        weight_decay=weight_decay,
     )
     disc_optimizer = Adam(
         vit_gan.discriminator.parameters(),
         lr=discriminator_learning_rate,
         betas=optimizer_betas,
+        weight_decay=weight_decay,
     )
 
     # Scheduler - Decay learning rate by 0.1 every 100 epochs
