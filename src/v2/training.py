@@ -166,7 +166,6 @@ def run():
     vit_gan.apply(modules.weights_init)
     vit_gan = modules.load_pretrained_discriminator(vit_gan)
 
-
     gen_optimizer = Adam(
         vit_gan.generator.parameters(),
         lr=generator_learning_rate,
