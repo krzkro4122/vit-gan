@@ -231,7 +231,7 @@ def run():
                 disc_loss = disc_loss_real + disc_loss_fake
 
                 # Gradient clipping
-                utils.clip_grad_norm_(vit_gan.discriminator.parameters(), max_norm=1.0)
+                utils.clip_grad_norm_(vit_gan.discriminator.parameters(), max_norm=5.0)
 
                 disc_loss.backward()
                 disc_optimizer.step()
