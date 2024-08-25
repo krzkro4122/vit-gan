@@ -112,6 +112,10 @@ def run():
     disc_losses = []
     gen_losses = []
     fid_scores = []
+    gradient_norms_gen = []
+    gradient_norms_disc = []
+    disc_real_accuracies = []
+    disc_fake_accuracies = []
 
     def construct_noise():
         return torch.randn(batch_size, *noise_shape, device=device)
@@ -240,6 +244,16 @@ def run():
                 disc_loss_ma.update(disc_loss.item())
                 disc_losses.append(disc_loss.item())
 
+                # Log discriminator accuracy
+                disc_real_acc = (real_output.sigmoid() > 0.5).float().mean().item()
+                disc_fake_acc = (fake_output.sigmoid() < 0.5).float().mean().item()
+                disc_real_accuracies.append(disc_real_acc)
+                disc_fake_accuracies.append(disc_fake_acc)
+
+                # Log gradient norm for discriminator
+                disc_grad_norm = utils.clip_grad_norm_(vit_gan.discriminator.parameters(), max_norm=5.0)
+                gradient_norms_disc.append(disc_grad_norm)
+
                 # Adaptive generator training frequency
                 iterations = (
                     5 if disc_loss_ma.get() < discriminator_loss_threshold else 1
@@ -260,12 +274,13 @@ def run():
                     )  # Weight for diversity loss
 
                     # Gradient clipping
-                    utils.clip_grad_norm_(vit_gan.generator.parameters(), max_norm=1.0)
+                    gen_grad_norm = utils.clip_grad_norm_(vit_gan.generator.parameters(), max_norm=1.0)
 
                     total_gen_loss.backward()
                     gen_optimizer.step()
 
                     gen_losses.append(gen_loss.item())
+                    gradient_norms_gen.append(gen_grad_norm)
 
                 if i % (len(train_loader) // 20) == 0:
 
@@ -313,7 +328,7 @@ def run():
                                 ),
                             )
                         log(
-                            f"Epoch [{epoch}/{epochs}], Step [{i}/{len(train_loader)}] | Disc Loss: {disc_loss.item():.8f}, Gen Loss: {gen_loss.item():.4f} | FID: {fid_score:.4f}"
+                            f"Epoch [{epoch}/{epochs}], Step [{i}/{len(train_loader)}] | Disc Loss: {disc_loss.item():.8f}, Gen Loss: {gen_loss.item():.4f} | FID: {fid_score:.4f} | Disc Real Acc: {disc_real_acc:.4f} | Disc Fake Acc: {disc_fake_acc:.4f} | Grad Norm Gen: {gen_grad_norm:.4f} | Grad Norm Disc: {disc_grad_norm:.4f}"
                         )
 
     except KeyboardInterrupt as ke:
@@ -341,6 +356,28 @@ def run():
             plt.ylabel("FID")
             plt.legend()
             plt.savefig(os.path.join(SAVE_DIR, "fid_score.png"))
+            plt.close()
+
+        if gradient_norms_gen and gradient_norms_disc:
+            plt.figure(figsize=(10, 5))
+            plt.title("Gradient Norms During Training")
+            plt.plot(gradient_norms_gen, label="Gen Grad Norm")
+            plt.plot(gradient_norms_disc, label="Disc Grad Norm")
+            plt.xlabel("Iterations")
+            plt.ylabel("Gradient Norm")
+            plt.legend()
+            plt.savefig(os.path.join(SAVE_DIR, "grad_norms.png"))
+            plt.close()
+
+        if disc_real_accuracies and disc_fake_accuracies:
+            plt.figure(figsize=(10, 5))
+            plt.title("Discriminator Accuracy During Training")
+            plt.plot(disc_real_accuracies, label="Disc Real Acc")
+            plt.plot(disc_fake_accuracies, label="Disc Fake Acc")
+            plt.xlabel("Iterations")
+            plt.ylabel("Accuracy")
+            plt.legend()
+            plt.savefig(os.path.join(SAVE_DIR, "disc_accuracy.png"))
             plt.close()
 
         model_path = os.path.join(SAVE_DIR, "final_model.ckpt")
