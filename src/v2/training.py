@@ -4,7 +4,6 @@ import traceback
 import math
 from matplotlib import pyplot as plt
 import torch
-import torch.nn.functional as F
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.utils as vutils
@@ -28,6 +27,7 @@ from src.v2.utils import (
 )
 
 
+# Existing moving average class
 class MovingAverage:
     def __init__(self, alpha=0.9):
         self.alpha = alpha
@@ -43,6 +43,7 @@ class MovingAverage:
         return self.value if self.value is not None else 0.0
 
 
+# Existing early stopping class
 class EarlyStopping:
     def __init__(self, patience=20, min_delta=5.0):
         self.patience = patience
@@ -65,20 +66,40 @@ class EarlyStopping:
             return False
 
 
+# New gradient penalty function for WGAN-GP
+def gradient_penalty(discriminator, real_images, fake_images, device):
+    batch_size = real_images.size(0)
+    epsilon = torch.rand(batch_size, 1, 1, 1, device=device)
+    interpolated_images = epsilon * real_images + (1 - epsilon) * fake_images
+    interpolated_images.requires_grad_(True)
+
+    interpolated_output = discriminator(interpolated_images)
+
+    gradients = torch.autograd.grad(
+        outputs=interpolated_output,
+        inputs=interpolated_images,
+        grad_outputs=torch.ones_like(interpolated_output),
+        create_graph=True,
+        retain_graph=True,
+        only_inputs=True,
+    )[0]
+
+    gradients = gradients.view(batch_size, -1)
+    gradient_norm = gradients.norm(2, dim=1)
+    penalty = ((gradient_norm - 1) ** 2).mean()
+    return penalty
+
+
+# Existing diversity loss function
 def diversity_loss(fake_images):
-    # Get batch size and flatten images
     batch_size = fake_images.size(0)
     fake_images_flat = fake_images.view(batch_size, -1)
-
-    # Calculate the pairwise absolute differences
     diffs = torch.cdist(fake_images_flat, fake_images_flat, p=1)
-
-    # Sum all pairwise differences and normalize
     _diversity_loss = diffs.sum() / (batch_size * (batch_size - 1))
-
     return _diversity_loss
 
 
+# Main training loop
 def run():
     torch.cuda.empty_cache()
     construct_directories()
@@ -94,15 +115,15 @@ def run():
     dropout_rate = 0.05
     batch_size = 256
     epochs = 10_000
-    generator_learning_rate = 1e-4  # Lowered learning rate
-    discriminator_learning_rate = 5e-5  # Lowered learning rate
+    generator_learning_rate = 1e-4
+    discriminator_learning_rate = 5e-5
     discriminator_loss_threshold = 0.3
     optimizer_betas = (0.5, 0.999)
     noise_shape = in_chans, img_size, img_size
     weight_decay = 0
+    lambda_gp = 10  # Gradient penalty coefficient
 
     if os.getenv("DEV", "0") == "1":
-        # Development Hyperparameters
         batch_size = 64
         epochs = 100
 
@@ -119,7 +140,7 @@ def run():
         return torch.randn(batch_size, *noise_shape, device=device)
 
     def denormalize(imgs):
-        return imgs * 0.5 + 0.5  # Convert from [-1,1] to [0,1]
+        return imgs * 0.5 + 0.5
 
     def save_images(save_path: str, images: torch.Tensor):
         vutils.save_image(
@@ -184,7 +205,7 @@ def run():
         weight_decay=weight_decay,
     )
 
-    # Scheduler - Decay learning rate by 0.1 every 100 epochs
+    # Scheduler
     gen_scheduler = ReduceLROnPlateau(
         gen_optimizer, mode="min", factor=0.5, patience=5, threshold=0.01, min_lr=1e-6
     )
@@ -215,8 +236,7 @@ def run():
             f"  {generator_learning_rate=}\n"
             f"  {discriminator_learning_rate=}\n"
             f"  {optimizer_betas=}\n"
-            f"  {noise_shape=} "
-            f"  {discriminator_loss_threshold=} "
+            f"  {lambda_gp=}"
         )
         for epoch in range(epochs):
             noise = construct_noise()
@@ -226,17 +246,26 @@ def run():
 
                 # Add instance noise to discriminator's inputs
                 noise_level = 0.1  # Start with small noise, adjust if needed
-                noisy_real_images = real_images + noise_level * torch.randn_like(real_images)
-                noisy_fake_images = vit_gan.generator(construct_noise()) + noise_level * torch.randn_like(real_images)
+                noisy_real_images = real_images + noise_level * torch.randn_like(
+                    real_images
+                )
+                noisy_fake_images = vit_gan.generator(
+                    construct_noise()
+                ) + noise_level * torch.randn_like(real_images)
 
                 # Train Discriminator
                 disc_optimizer.zero_grad()
-                real_output = vit_gan.discriminator(noisy_real_images)
-                fake_output = vit_gan.discriminator(noisy_fake_images.detach())
+                real_output = vit_gan.discriminator(noisy_real_images).view(-1)
+                fake_output = vit_gan.discriminator(noisy_fake_images.detach()).view(-1)
 
-                disc_loss_real = F.mse_loss(real_output, torch.ones_like(real_output))
-                disc_loss_fake = F.mse_loss(fake_output, torch.zeros_like(fake_output))
-                disc_loss = disc_loss_real + disc_loss_fake
+                # WGAN-GP Loss for Discriminator
+                disc_loss = -(torch.mean(real_output) - torch.mean(fake_output))
+
+                # Compute Gradient Penalty
+                gp = gradient_penalty(
+                    vit_gan.discriminator, noisy_real_images, noisy_fake_images, device
+                )
+                disc_loss += lambda_gp * gp
 
                 # Gradient clipping
                 utils.clip_grad_norm_(vit_gan.discriminator.parameters(), max_norm=5.0)
@@ -249,8 +278,8 @@ def run():
                 disc_losses.append(disc_loss.item())
 
                 # Log discriminator accuracy
-                disc_real_acc = (real_output.sigmoid() > 0.5).float().mean().item()
-                disc_fake_acc = (fake_output.sigmoid() < 0.5).float().mean().item()
+                disc_real_acc = (real_output > 0).float().mean().item()
+                disc_fake_acc = (fake_output < 0).float().mean().item()
                 disc_real_accuracies.append(disc_real_acc)
                 disc_fake_accuracies.append(disc_fake_acc)
 
@@ -260,23 +289,17 @@ def run():
                 )
                 gradient_norms_disc.append(disc_grad_norm)
 
-                # Adaptive generator training frequency
-                iterations = (
-                    5 if disc_loss_ma.get() < discriminator_loss_threshold else 1
-                )
-
-                for _ in range(iterations):
+                # Train Generator (Only once for every 5 discriminator updates)
+                if i % 5 == 0:
                     gen_optimizer.zero_grad()
-                    noise = construct_noise()
-                    fake_images = vit_gan.generator(noise)
-                    output = vit_gan.discriminator(fake_images)
+                    fake_images = vit_gan.generator(construct_noise())
+                    output = vit_gan.discriminator(fake_images).view(-1)
 
-                    gen_loss = F.mse_loss(output, torch.ones_like(output))
+                    # WGAN-GP Loss for Generator
+                    gen_loss = -torch.mean(output)
 
                     div_loss = diversity_loss(fake_images)
-                    total_gen_loss = (
-                        gen_loss + 0.1 * div_loss  # Increase weight for diversity loss
-                    )
+                    total_gen_loss = gen_loss + 0.1 * div_loss
 
                     # Gradient clipping
                     gen_grad_norm = utils.clip_grad_norm_(
@@ -290,7 +313,6 @@ def run():
                     gradient_norms_gen.append(gen_grad_norm)
 
                 if i % (len(train_loader) // 20) == 0:
-
                     with torch.no_grad():
                         noise = construct_noise()
                         fake_images = vit_gan.generator(noise).detach()
