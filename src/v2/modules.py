@@ -10,19 +10,6 @@ def weights_init(m):
             nn.init.constant_(m.bias.data, 0)
 
 
-def load_pretrained_discriminator(vit_gan):
-    # Example with a pretrained ViT model
-    pretrained_vit = vit_b_16(pretrained=True)
-
-    # Replace the head to match the discriminator's output
-    vit_gan.discriminator.vit.head = nn.Linear(pretrained_vit.head.in_features, 1)
-
-    # Copy weights
-    vit_gan.discriminator.vit.load_state_dict(pretrained_vit.state_dict(), strict=False)
-
-    return vit_gan
-
-
 class PatchEmbedding(nn.Module):
     def __init__(self, img_size, patch_size, in_chans, embed_dim):
         super().__init__()
@@ -265,3 +252,24 @@ class ViTGAN(nn.Module):
         generated_images = self.generator(x)
         discriminator_output = self.discriminator(generated_images)
         return generated_images, discriminator_output
+
+
+def load_pretrained_discriminator(vit_gan):
+    # Load a pretrained Vision Transformer (ViT) model
+    pretrained_vit = vit_b_16(pretrained=True)
+
+    # Replace the last layer to match the discriminator's output
+    if hasattr(pretrained_vit, "fc"):  # Check if the last layer is named 'fc'
+        pretrained_vit.fc = nn.Linear(pretrained_vit.fc.in_features, 1)
+    elif hasattr(
+        pretrained_vit, "classifier"
+    ):  # Sometimes the layer might be named 'classifier'
+        pretrained_vit.classifier = nn.Linear(pretrained_vit.classifier.in_features, 1)
+    else:
+        # If there's no head module, replace the linear layer directly
+        pretrained_vit.heads.head = nn.Linear(pretrained_vit.heads.head.in_features, 1)
+
+    # Copy weights from the pretrained model to your discriminator
+    vit_gan.discriminator.vit.load_state_dict(pretrained_vit.state_dict(), strict=False)
+
+    return vit_gan
