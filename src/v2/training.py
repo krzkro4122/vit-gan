@@ -8,7 +8,6 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.utils as vutils
 import torch.nn.utils as utils
-from torch.nn.utils import spectral_norm
 import src.v2.modules as modules
 
 from typing import Optional, Union
@@ -106,7 +105,7 @@ def run():
 
     # Production Hyperparameters
     img_size = 32
-    patch_size = 4
+    patch_size = 16
     in_chans = 3
     embed_dim = 256
     no_of_transformer_blocks = 8
@@ -188,9 +187,6 @@ def run():
 
     vit_gan.apply(modules.weights_init)
     vit_gan = modules.load_pretrained_discriminator(vit_gan)
-
-    # Apply spectral normalization to discriminator layers
-    vit_gan.discriminator = spectral_norm(vit_gan.discriminator)
 
     gen_optimizer = Adam(
         vit_gan.generator.parameters(),

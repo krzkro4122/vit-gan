@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
-from torchvision.models import vit_b_16
+from torchvision.models import vit_b_16, ViT_B_16_Weights
+from torch.nn.utils import spectral_norm
 
 
 def weights_init(m):
@@ -205,6 +206,10 @@ class ViTDiscriminator(nn.Module):
             num_classes=1,
             dropout_rate=dropout_rate,
         )
+        # Apply spectral normalization to each linear layer in the Transformer
+        for module in self.modules():
+            if isinstance(module, nn.Linear):
+                spectral_norm(module)
 
     def forward(self, x):
         x = self.vit(x)
@@ -256,7 +261,7 @@ class ViTGAN(nn.Module):
 
 def load_pretrained_discriminator(vit_gan):
     # Load a pretrained Vision Transformer (ViT) model
-    pretrained_vit = vit_b_16(pretrained=True)
+    pretrained_vit = vit_b_16(weights=ViT_B_16_Weights.DEFAULT)
 
     # Replace the last layer to match the discriminator's output
     if hasattr(pretrained_vit, "fc"):  # Check if the last layer is named 'fc'
