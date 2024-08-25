@@ -102,9 +102,6 @@ def run():
 
     if os.getenv("DEV", "0") == "1":
         # Development Hyperparameters
-        embed_dim = 192
-        no_of_transformer_blocks = 6
-        num_heads = 6
         batch_size = 64
         epochs = 100
 
@@ -166,6 +163,7 @@ def run():
         mlp_ratio,
         dropout_rate,
     ).to(device)
+    vit_gan.apply(modules.weights_init)
     gen_optimizer = Adam(
         vit_gan.generator.parameters(),
         lr=generator_learning_rate,
@@ -226,12 +224,8 @@ def run():
                 real_output = vit_gan.discriminator(real_images)
                 fake_output = vit_gan.discriminator(fake_images.detach())
 
-                disc_loss_real = F.binary_cross_entropy_with_logits(
-                    real_output, torch.ones_like(real_output)
-                )
-                disc_loss_fake = F.binary_cross_entropy_with_logits(
-                    fake_output, torch.zeros_like(fake_output)
-                )
+                disc_loss_real = F.mse_loss(real_output, torch.ones_like(real_output))
+                disc_loss_fake = F.mse_loss(fake_output, torch.zeros_like(fake_output))
                 disc_loss = disc_loss_real + disc_loss_fake
 
                 # Gradient clipping
@@ -251,7 +245,9 @@ def run():
                 disc_fake_accuracies.append(disc_fake_acc)
 
                 # Log gradient norm for discriminator
-                disc_grad_norm = utils.clip_grad_norm_(vit_gan.discriminator.parameters(), max_norm=5.0)
+                disc_grad_norm = utils.clip_grad_norm_(
+                    vit_gan.discriminator.parameters(), max_norm=5.0
+                )
                 gradient_norms_disc.append(disc_grad_norm)
 
                 # Adaptive generator training frequency
@@ -265,16 +261,17 @@ def run():
                     fake_images = vit_gan.generator(noise)
                     output = vit_gan.discriminator(fake_images)
 
-                    gen_loss = F.binary_cross_entropy_with_logits(
-                        output, torch.ones_like(output)
-                    )
+                    gen_loss = F.mse_loss(output, torch.ones_like(output))
+
                     div_loss = diversity_loss(fake_images)
                     total_gen_loss = (
                         gen_loss + 0.05 * div_loss
                     )  # Weight for diversity loss
 
                     # Gradient clipping
-                    gen_grad_norm = utils.clip_grad_norm_(vit_gan.generator.parameters(), max_norm=1.0)
+                    gen_grad_norm = utils.clip_grad_norm_(
+                        vit_gan.generator.parameters(), max_norm=1.0
+                    )
 
                     total_gen_loss.backward()
                     gen_optimizer.step()

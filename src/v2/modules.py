@@ -2,6 +2,13 @@ import torch
 import torch.nn as nn
 
 
+def weights_init(m):
+    if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
+        nn.init.xavier_normal_(m.weight.data)
+        if m.bias is not None:
+            nn.init.constant_(m.bias.data, 0)
+
+
 class PatchEmbedding(nn.Module):
     def __init__(self, img_size, patch_size, in_chans, embed_dim):
         super().__init__()
