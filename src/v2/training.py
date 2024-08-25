@@ -191,7 +191,7 @@ def run():
 
     # Initialize moving average and early stopping
     disc_loss_ma = MovingAverage(alpha=0.9)
-    early_stopping = EarlyStopping(patience=20, min_delta=5.0)
+    early_stopping = EarlyStopping(patience=20, min_delta=50.0)
 
     try:
         log(f"Starting training at: {str(datetime.datetime.now())}")
