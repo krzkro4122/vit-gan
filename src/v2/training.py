@@ -9,6 +9,7 @@ import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torchvision.utils as vutils
 import torch.nn.utils as utils
+from torch.nn.utils import spectral_norm
 import src.v2.modules as modules
 
 from typing import Optional, Union
@@ -93,8 +94,8 @@ def run():
     dropout_rate = 0.05
     batch_size = 256
     epochs = 10_000
-    generator_learning_rate = 3e-4
-    discriminator_learning_rate = 1e-4
+    generator_learning_rate = 1e-4  # Lowered learning rate
+    discriminator_learning_rate = 5e-5  # Lowered learning rate
     discriminator_loss_threshold = 0.3
     optimizer_betas = (0.5, 0.999)
     noise_shape = in_chans, img_size, img_size
@@ -163,8 +164,12 @@ def run():
         mlp_ratio,
         dropout_rate,
     ).to(device)
+
     vit_gan.apply(modules.weights_init)
     vit_gan = modules.load_pretrained_discriminator(vit_gan)
+
+    # Apply spectral normalization to discriminator layers
+    vit_gan.discriminator = spectral_norm(vit_gan.discriminator)
 
     gen_optimizer = Adam(
         vit_gan.generator.parameters(),
@@ -219,12 +224,15 @@ def run():
             for i, (real_images, _) in enumerate(train_loader):
                 real_images = real_images.to(device)
 
+                # Add instance noise to discriminator's inputs
+                noise_level = 0.1  # Start with small noise, adjust if needed
+                noisy_real_images = real_images + noise_level * torch.randn_like(real_images)
+                noisy_fake_images = vit_gan.generator(construct_noise()) + noise_level * torch.randn_like(real_images)
+
                 # Train Discriminator
                 disc_optimizer.zero_grad()
-                noise = construct_noise()
-                fake_images = vit_gan.generator(noise)
-                real_output = vit_gan.discriminator(real_images)
-                fake_output = vit_gan.discriminator(fake_images.detach())
+                real_output = vit_gan.discriminator(noisy_real_images)
+                fake_output = vit_gan.discriminator(noisy_fake_images.detach())
 
                 disc_loss_real = F.mse_loss(real_output, torch.ones_like(real_output))
                 disc_loss_fake = F.mse_loss(fake_output, torch.zeros_like(fake_output))
@@ -267,8 +275,8 @@ def run():
 
                     div_loss = diversity_loss(fake_images)
                     total_gen_loss = (
-                        gen_loss + 0.05 * div_loss
-                    )  # Weight for diversity loss
+                        gen_loss + 0.1 * div_loss  # Increase weight for diversity loss
+                    )
 
                     # Gradient clipping
                     gen_grad_norm = utils.clip_grad_norm_(
