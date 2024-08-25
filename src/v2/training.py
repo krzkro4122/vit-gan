@@ -98,7 +98,7 @@ def run():
     discriminator_loss_threshold = 0.3
     optimizer_betas = (0.5, 0.999)
     noise_shape = in_chans, img_size, img_size
-    weight_decay = 1e-5
+    weight_decay = 0
 
     if os.getenv("DEV", "0") == "1":
         # Development Hyperparameters
