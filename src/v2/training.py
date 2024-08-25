@@ -88,7 +88,7 @@ def run():
     in_chans = 3
     embed_dim = 256
     no_of_transformer_blocks = 8
-    num_heads = 6
+    num_heads = 8
     mlp_ratio = 4.0
     dropout_rate = 0.05
     batch_size = 256
