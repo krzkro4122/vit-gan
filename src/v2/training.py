@@ -136,11 +136,6 @@ def run():
     transform = transforms.Compose(
         [
             transforms.Resize((img_size, img_size)),
-            transforms.RandomHorizontalFlip(),  # Add random horizontal flip
-            transforms.RandomRotation(15),  # Add random rotation
-            transforms.ColorJitter(
-                brightness=0.2, contrast=0.2, saturation=0.2, hue=0.2
-            ),  # Add color jitter
             transforms.ToTensor(),
             transforms.Normalize((0.5,), (0.5,)),
         ]
@@ -181,8 +176,12 @@ def run():
     )
 
     # Scheduler - Decay learning rate by 0.1 every 100 epochs
-    gen_scheduler = ReduceLROnPlateau(gen_optimizer, mode='min', factor=0.5, patience=5, threshold=0.01, min_lr=1e-6)
-    disc_scheduler = ReduceLROnPlateau(disc_optimizer, mode='min', factor=0.5, patience=5, threshold=0.01, min_lr=1e-6)
+    gen_scheduler = ReduceLROnPlateau(
+        gen_optimizer, mode="min", factor=0.5, patience=5, threshold=0.01, min_lr=1e-6
+    )
+    disc_scheduler = ReduceLROnPlateau(
+        disc_optimizer, mode="min", factor=0.5, patience=5, threshold=0.01, min_lr=1e-6
+    )
 
     fid = FrechetInceptionDistance(feature=2048).to(device)
 
