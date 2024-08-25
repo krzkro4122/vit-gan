@@ -164,7 +164,7 @@ def run():
         dropout_rate,
     ).to(device)
     vit_gan.apply(modules.weights_init)
-    vit_gan = load_pretrained_discriminator(vit_gan)
+    vit_gan = modules.load_pretrained_discriminator(vit_gan)
 
 
     gen_optimizer = Adam(
