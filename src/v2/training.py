@@ -105,7 +105,7 @@ def run():
 
     # Production Hyperparameters
     img_size = 32
-    patch_size = 16
+    patch_size = 8
     in_chans = 3
     embed_dim = 256
     no_of_transformer_blocks = 8
@@ -114,9 +114,8 @@ def run():
     dropout_rate = 0.05
     batch_size = 256
     epochs = 10_000
-    generator_learning_rate = 1e-4
-    discriminator_learning_rate = 5e-5
-    discriminator_loss_threshold = 0.3
+    generator_learning_rate = 1e-3
+    discriminator_learning_rate = 5e-4
     optimizer_betas = (0.5, 0.999)
     noise_shape = in_chans, img_size, img_size
     weight_decay = 0
