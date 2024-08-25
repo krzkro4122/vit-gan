@@ -3,7 +3,6 @@ import os
 import traceback
 import math
 from matplotlib import pyplot as plt
-import numpy as np
 import torch
 import torch.nn.functional as F
 import torchvision.transforms as transforms
@@ -14,7 +13,7 @@ import src.v2.modules as modules
 
 from typing import Optional, Union
 from torch.optim.adam import Adam
-from torch.optim.lr_scheduler import StepLR
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
 from torchmetrics.image.fid import FrechetInceptionDistance
 from src.v2.utils import (
@@ -87,19 +86,19 @@ def run():
     img_size = 32
     patch_size = 4
     in_chans = 3
-    embed_dim = 192
-    no_of_transformer_blocks = 6
+    embed_dim = 256
+    no_of_transformer_blocks = 8
     num_heads = 6
     mlp_ratio = 4.0
-    dropout_rate = 0.1
-    batch_size = 512
+    dropout_rate = 0.05
+    batch_size = 256
     epochs = 10_000
-    generator_learning_rate = 1e-4
-    discriminator_learning_rate = 4e-5
+    generator_learning_rate = 3e-4
+    discriminator_learning_rate = 1e-4
     discriminator_loss_threshold = 0.3
     optimizer_betas = (0.5, 0.999)
     noise_shape = in_chans, img_size, img_size
-    weight_decay = 1e-4
+    weight_decay = 1e-5
 
     if os.getenv("DEV", "0") == "1":
         # Development Hyperparameters
@@ -182,14 +181,14 @@ def run():
     )
 
     # Scheduler - Decay learning rate by 0.1 every 100 epochs
-    gen_scheduler = StepLR(gen_optimizer, step_size=100, gamma=0.1)
-    disc_scheduler = StepLR(disc_optimizer, step_size=100, gamma=0.1)
+    gen_scheduler = ReduceLROnPlateau(gen_optimizer, mode='min', factor=0.5, patience=5, threshold=0.01, min_lr=1e-6)
+    disc_scheduler = ReduceLROnPlateau(disc_optimizer, mode='min', factor=0.5, patience=5, threshold=0.01, min_lr=1e-6)
 
     fid = FrechetInceptionDistance(feature=2048).to(device)
 
     # Initialize moving average and early stopping
     disc_loss_ma = MovingAverage(alpha=0.9)
-    early_stopping = EarlyStopping(patience=10, min_delta=5.0)
+    early_stopping = EarlyStopping(patience=20, min_delta=5.0)
 
     try:
         log(f"Starting training at: {str(datetime.datetime.now())}")
@@ -258,7 +257,7 @@ def run():
                     )
                     div_loss = diversity_loss(fake_images)
                     total_gen_loss = (
-                        gen_loss + 0.1 * div_loss
+                        gen_loss + 0.05 * div_loss
                     )  # Weight for diversity loss
 
                     # Gradient clipping
@@ -270,9 +269,6 @@ def run():
                     gen_losses.append(gen_loss.item())
 
                 if i % (len(train_loader) // 20) == 0:
-                    # Step learning rate schedulers
-                    gen_scheduler.step()
-                    disc_scheduler.step()
 
                     with torch.no_grad():
                         noise = construct_noise()
@@ -287,6 +283,10 @@ def run():
                         fid_score = fid.compute().item()
                         fid.reset()
                         fid_scores.append(fid_score)
+
+                        # Step learning rate schedulers
+                        gen_scheduler.step(fid_score)
+                        disc_scheduler.step(fid_score)
 
                         # Check for early stopping based on FID
                         if early_stopping.should_stop(fid_score):
