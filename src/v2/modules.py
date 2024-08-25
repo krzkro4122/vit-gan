@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from torchvision.models import vit_b_16
 
 
 def weights_init(m):
@@ -7,6 +8,19 @@ def weights_init(m):
         nn.init.xavier_normal_(m.weight.data)
         if m.bias is not None:
             nn.init.constant_(m.bias.data, 0)
+
+
+def load_pretrained_discriminator(vit_gan):
+    # Example with a pretrained ViT model
+    pretrained_vit = vit_b_16(pretrained=True)
+
+    # Replace the head to match the discriminator's output
+    vit_gan.discriminator.vit.head = nn.Linear(pretrained_vit.head.in_features, 1)
+
+    # Copy weights
+    vit_gan.discriminator.vit.load_state_dict(pretrained_vit.state_dict(), strict=False)
+
+    return vit_gan
 
 
 class PatchEmbedding(nn.Module):
