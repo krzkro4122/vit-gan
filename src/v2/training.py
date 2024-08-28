@@ -117,7 +117,7 @@ def run():
     generator_learning_rate = 1e-3
     discriminator_learning_rate = 5e-4
     optimizer_betas = (0.5, 0.999)
-    noise_shape = (batch_size, in_chans, img_size, img_size)  # Update noise shape
+    noise_shape = in_chans, img_size, img_size
     weight_decay = 0
     lambda_gp = 10  # Gradient penalty coefficient
 
@@ -135,7 +135,7 @@ def run():
     disc_fake_accuracies = []
 
     def construct_noise():
-        return torch.randn(*noise_shape, device=device)  # Generate noise with the correct shape
+        return torch.randn(batch_size, *noise_shape, device=device)
 
     def denormalize(imgs):
         return imgs * 0.5 + 0.5
@@ -238,8 +238,6 @@ def run():
             save_samples(label=epoch, noise=noise)
             for i, (real_images, _) in enumerate(train_loader):
                 real_images = real_images.to(device)
-                if real_images.size(0) != batch_size:
-                    continue  # Skip the batch if the batch size is not correct
 
                 # Add instance noise to discriminator's inputs
                 noise_level = 0.1  # Start with small noise, adjust if needed
