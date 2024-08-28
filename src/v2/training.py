@@ -356,56 +356,54 @@ def run():
                         log(
                             f"Epoch [{epoch}/{epochs}], Step [{i}/{len(train_loader)}] | Disc Loss: {disc_loss.item():.8f}, Gen Loss: {gen_loss.item():.4f} | FID: {fid_score:.4f} | Disc Real Acc: {disc_real_acc:.4f} | Disc Fake Acc: {disc_fake_acc:.4f} | Grad Norm Gen: {gen_grad_norm:.4f} | Grad Norm Disc: {disc_grad_norm:.4f}"
                         )
+        if epoch % 10:
+            if gen_losses and disc_losses:
+                plt.figure(figsize=(10, 5))
+                plt.title("Generator and Discriminator Loss During Training")
+                plt.plot(gen_losses, label="G Loss")
+                plt.plot(disc_losses, label="D Loss")
+                plt.xlabel("Iterations")
+                plt.ylabel("Loss")
+                plt.legend()
+                plt.savefig(os.path.join(SAVE_DIR, "losses.png"))
+                plt.close()
 
+            if fid_scores:
+                plt.figure(figsize=(10, 5))
+                plt.title("FID Score During Training")
+                plt.plot(fid_scores, label="FID Score")
+                plt.xlabel("Iterations")
+                plt.ylabel("FID")
+                plt.legend()
+                plt.savefig(os.path.join(SAVE_DIR, "fid_score.png"))
+                plt.close()
+
+            if gradient_norms_gen and gradient_norms_disc:
+                plt.figure(figsize=(10, 5))
+                plt.title("Gradient Norms During Training")
+                plt.plot(gradient_norms_gen, label="Gen Grad Norm")
+                plt.plot(gradient_norms_disc, label="Disc Grad Norm")
+                plt.xlabel("Iterations")
+                plt.ylabel("Gradient Norm")
+                plt.legend()
+                plt.savefig(os.path.join(SAVE_DIR, "grad_norms.png"))
+                plt.close()
+
+            if disc_real_accuracies and disc_fake_accuracies:
+                plt.figure(figsize=(10, 5))
+                plt.title("Discriminator Accuracy During Training")
+                plt.plot(disc_real_accuracies, label="Disc Real Acc")
+                plt.plot(disc_fake_accuracies, label="Disc Fake Acc")
+                plt.xlabel("Iterations")
+                plt.ylabel("Accuracy")
+                plt.legend()
+                plt.savefig(os.path.join(SAVE_DIR, "disc_accuracy.png"))
+                plt.close()
     except KeyboardInterrupt as ke:
         log(f"{ke} raised!")
     except Exception as e:
         log(f"{e} raised!\n{traceback.format_exc()}")
     finally:
-        # Final cleanup and saving
-        if gen_losses and disc_losses:
-            plt.figure(figsize=(10, 5))
-            plt.title("Generator and Discriminator Loss During Training")
-            plt.plot(gen_losses, label="G Loss")
-            plt.plot(disc_losses, label="D Loss")
-            plt.xlabel("Iterations")
-            plt.ylabel("Loss")
-            plt.legend()
-            plt.savefig(os.path.join(SAVE_DIR, "losses.png"))
-            plt.close()
-
-        if fid_scores:
-            plt.figure(figsize=(10, 5))
-            plt.title("FID Score During Training")
-            plt.plot(fid_scores, label="FID Score")
-            plt.xlabel("Iterations")
-            plt.ylabel("FID")
-            plt.legend()
-            plt.savefig(os.path.join(SAVE_DIR, "fid_score.png"))
-            plt.close()
-
-        if gradient_norms_gen and gradient_norms_disc:
-            plt.figure(figsize=(10, 5))
-            plt.title("Gradient Norms During Training")
-            plt.plot(gradient_norms_gen, label="Gen Grad Norm")
-            plt.plot(gradient_norms_disc, label="Disc Grad Norm")
-            plt.xlabel("Iterations")
-            plt.ylabel("Gradient Norm")
-            plt.legend()
-            plt.savefig(os.path.join(SAVE_DIR, "grad_norms.png"))
-            plt.close()
-
-        if disc_real_accuracies and disc_fake_accuracies:
-            plt.figure(figsize=(10, 5))
-            plt.title("Discriminator Accuracy During Training")
-            plt.plot(disc_real_accuracies, label="Disc Real Acc")
-            plt.plot(disc_fake_accuracies, label="Disc Fake Acc")
-            plt.xlabel("Iterations")
-            plt.ylabel("Accuracy")
-            plt.legend()
-            plt.savefig(os.path.join(SAVE_DIR, "disc_accuracy.png"))
-            plt.close()
-
         model_path = os.path.join(SAVE_DIR, "final_model.ckpt")
         log(
             f"Run took {str(datetime.datetime.now() - START_TIME)}. Saving the model to: {model_path}"
