@@ -311,7 +311,7 @@ def run():
                     gen_losses.append(gen_loss.item())
                     gradient_norms_gen.append(gen_grad_norm)
 
-                if i % (len(train_loader) // 782) == 0:
+                if i % (len(train_loader) // 20) == 0:
                     with torch.no_grad():
                         noise = construct_noise()
                         fake_images = vit_gan.generator(noise).detach()
