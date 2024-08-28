@@ -114,11 +114,12 @@ def run():
     dropout_rate = 0.05
     batch_size = 256
     epochs = 10_000
-    generator_learning_rate = 1e-3
-    discriminator_learning_rate = 5e-4
+    generator_learning_rate = 1e-5
+    discriminator_learning_rate = 1e-5
     optimizer_betas = (0.5, 0.999)
     noise_shape = in_chans, img_size, img_size
-    weight_decay = 0
+    disc_weight_decay = 1e-4
+    gen_weight_decay = 0
     lambda_gp = 10  # Gradient penalty coefficient
 
     if os.getenv("DEV", "0") == "1":
@@ -186,18 +187,19 @@ def run():
 
     vit_gan.apply(modules.weights_init)
     vit_gan = modules.load_pretrained_discriminator(vit_gan)
+    vit_gan.train()
 
     gen_optimizer = Adam(
         vit_gan.generator.parameters(),
         lr=generator_learning_rate,
         betas=optimizer_betas,
-        weight_decay=weight_decay,
+        weight_decay=gen_weight_decay,
     )
     disc_optimizer = Adam(
         vit_gan.discriminator.parameters(),
         lr=discriminator_learning_rate,
         betas=optimizer_betas,
-        weight_decay=weight_decay,
+        weight_decay=disc_weight_decay,
     )
 
     # Scheduler
@@ -231,6 +233,8 @@ def run():
             f"  {generator_learning_rate=}\n"
             f"  {discriminator_learning_rate=}\n"
             f"  {optimizer_betas=}\n"
+            f"  {gen_weight_decay=}"
+            f"  {disc_weight_decay=}"
             f"  {lambda_gp=}"
         )
         for epoch in range(epochs):
@@ -262,11 +266,11 @@ def run():
                 )
                 disc_loss += lambda_gp * gp
 
-                # Gradient clipping
-                utils.clip_grad_norm_(vit_gan.discriminator.parameters(), max_norm=5.0)
-
+                # Gradient clipping for the discriminator
                 disc_loss.backward()
                 disc_optimizer.step()
+
+                utils.clip_grad_norm_(vit_gan.discriminator.parameters(), max_norm=5.0)
 
                 # Update moving average of discriminator loss
                 disc_loss_ma.update(disc_loss.item())
@@ -296,18 +300,18 @@ def run():
                     div_loss = diversity_loss(fake_images)
                     total_gen_loss = gen_loss + 0.1 * div_loss
 
-                    # Gradient clipping
-                    gen_grad_norm = utils.clip_grad_norm_(
-                        vit_gan.generator.parameters(), max_norm=1.0
-                    )
-
                     total_gen_loss.backward()
+
+                    # Gradient clipping for the generator
                     gen_optimizer.step()
 
+                    gen_grad_norm = utils.clip_grad_norm_(
+                        vit_gan.generator.parameters(), max_norm=0.5
+                    )
                     gen_losses.append(gen_loss.item())
                     gradient_norms_gen.append(gen_grad_norm)
 
-                if i % (len(train_loader) // 20) == 0:
+                if i % (len(train_loader) // 782) == 0:
                     with torch.no_grad():
                         noise = construct_noise()
                         fake_images = vit_gan.generator(noise).detach()
@@ -329,7 +333,7 @@ def run():
                         # Check for early stopping based on FID
                         if early_stopping.should_stop(fid_score):
                             log(
-                                f"Early stopping triggered at epoch {epoch}, step {i}, ({fid_score=})"
+                                f"Early stopping triggered at epoch {epoch}, step {i}, ({fid_score=}/{early_stopping.best_score=})"
                             )
                             break
 
@@ -354,7 +358,7 @@ def run():
                         log(
                             f"Epoch [{epoch}/{epochs}], Step [{i}/{len(train_loader)}] | Disc Loss: {disc_loss.item():.8f}, Gen Loss: {gen_loss.item():.4f} | FID: {fid_score:.4f} | Disc Real Acc: {disc_real_acc:.4f} | Disc Fake Acc: {disc_fake_acc:.4f} | Grad Norm Gen: {gen_grad_norm:.4f} | Grad Norm Disc: {disc_grad_norm:.4f}"
                         )
-        if epoch % 10:
+        if epoch % 10 == 0:  # Changed to correctly save plots at intervals
             if gen_losses and disc_losses:
                 plt.figure(figsize=(10, 5))
                 plt.title("Generator and Discriminator Loss During Training")
