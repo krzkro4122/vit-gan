@@ -1,19 +1,11 @@
 import torch
 import torch.nn as nn
 from torchvision.models import vit_b_16, ViT_B_16_Weights
-from torch.nn.utils import spectral_norm
-
-
-def weights_init(m):
-    if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
-        nn.init.xavier_normal_(m.weight.data)
-        if m.bias is not None:
-            nn.init.constant_(m.bias.data, 0)
 
 
 class PatchEmbedding(nn.Module):
     def __init__(self, img_size, patch_size, in_chans, embed_dim):
-        super().__init__()
+        super(PatchEmbedding, self).__init__()
         self.img_size = img_size
         self.patch_size = patch_size
         self.num_patches = (img_size // patch_size) ** 2
@@ -36,9 +28,10 @@ class PatchEmbedding(nn.Module):
         return x
 
 
+# Define an attention mechanism
 class Attention(nn.Module):
     def __init__(self, dim, num_heads):
-        super().__init__()
+        super(Attention, self).__init__()
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
         self.scale = self.head_dim**-0.5
@@ -60,11 +53,12 @@ class Attention(nn.Module):
         return out
 
 
+# Define MLP
 class MLP(nn.Module):
     def __init__(
         self, in_features, hidden_features=None, out_features=None, dropout_rate=0.0
     ):
-        super().__init__()
+        super(MLP, self).__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
         self.fc1 = nn.Linear(in_features, hidden_features)
@@ -80,9 +74,10 @@ class MLP(nn.Module):
         return x
 
 
+# Define the Transformer Block
 class TransformerBlock(nn.Module):
     def __init__(self, dim, num_heads, mlp_ratio=4.0, dropout_rate=0.0, noise_std=0.1):
-        super().__init__()
+        super(TransformerBlock, self).__init__()
         self.norm1 = nn.LayerNorm(dim)
         self.attn = Attention(dim, num_heads)
         self.norm2 = nn.LayerNorm(dim)
@@ -100,6 +95,7 @@ class TransformerBlock(nn.Module):
         return x
 
 
+# Define Vision Transformer
 class VisionTransformer(nn.Module):
     def __init__(
         self,
@@ -113,7 +109,7 @@ class VisionTransformer(nn.Module):
         num_classes=1000,
         dropout_rate=0.0,
     ):
-        super().__init__()
+        super(VisionTransformer, self).__init__()
         self.patch_embed = PatchEmbedding(img_size, patch_size, in_chans, embed_dim)
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
         self.pos_embed = nn.Parameter(
@@ -147,134 +143,140 @@ class VisionTransformer(nn.Module):
         return x
 
 
-class ViTGenerator(nn.Module):
-    def __init__(
-        self,
-        img_size,
-        patch_size,
-        in_chans,
-        embed_dim,
-        depth,
-        num_heads,
-        mlp_ratio=4.0,
-        dropout_rate=0.0,
-    ):
-        super().__init__()
-        self.vit = VisionTransformer(
-            img_size,
-            patch_size,
-            in_chans,
-            embed_dim,
-            depth,
-            num_heads,
-            mlp_ratio,
-            num_classes=embed_dim,
-            dropout_rate=dropout_rate,
+# Define the HybridGenerator
+class HybridGenerator(nn.Module):
+    def __init__(self, img_size, patch_size, embed_dim, depth, num_heads, mlp_ratio, in_chans, num_channels=3):
+        super(HybridGenerator, self).__init__()
+        self.init_size = img_size // 4  # Start with a quarter of the target size
+        self.embed_dim = embed_dim
+        self.linear = nn.Linear(in_chans * img_size * img_size, embed_dim * self.init_size * self.init_size)
+        self.transformer_blocks = nn.ModuleList([
+            TransformerBlock(embed_dim, num_heads, mlp_ratio) for _ in range(depth)
+        ])
+        self.upsample_blocks = nn.ModuleList([
+            UpSampleBlock(embed_dim, embed_dim // 2),
+            UpSampleBlock(embed_dim // 2, embed_dim // 4),
+        ])
+        self.final_conv = nn.Conv2d(embed_dim // 4, num_channels, kernel_size=3, padding=1)
+        self.tanh = nn.Tanh()
+
+    def forward(self, z):
+        # Flatten the spatial dimensions
+        batch_size, channels, height, width = z.shape
+        z = z.view(batch_size, -1)  # Shape: (batch_size, in_chans * img_size * img_size)
+
+        # Pass through the linear layer to get the desired embedding
+        x = self.linear(z).view(batch_size, self.embed_dim, self.init_size, self.init_size)
+
+        # Continue with the rest of the forward pass
+        for transformer in self.transformer_blocks:
+            x = transformer(x.flatten(2).permute(2, 0, 1)).permute(1, 2, 0).view(x.size())
+        for upsample in self.upsample_blocks:
+            x = upsample(x)
+        return self.tanh(self.final_conv(x))
+
+
+
+class UpSampleBlock(nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super(UpSampleBlock, self).__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
+        self.norm = nn.BatchNorm2d(out_channels)
+        self.relu = nn.ReLU()
+        self.upsample = nn.Upsample(
+            scale_factor=2, mode="bilinear", align_corners=False
         )
-        self.linear = nn.Linear(embed_dim, img_size * img_size * in_chans)
-        self.img_size = img_size
-        self.in_chans = in_chans
 
     def forward(self, x):
-        x = self.vit(x)
-        x = self.linear(x)
-        x = x.view(-1, self.in_chans, self.img_size, self.img_size)
+        x = self.conv(x)
+        x = self.norm(x)
+        x = self.relu(x)
+        x = self.upsample(x)
         return x
 
 
-class ViTDiscriminator(nn.Module):
+# Define the HybridDiscriminator
+class HybridDiscriminator(nn.Module):
     def __init__(
         self,
         img_size,
         patch_size,
-        in_chans,
         embed_dim,
         depth,
         num_heads,
-        mlp_ratio=4.0,
-        dropout_rate=0.0,
+        mlp_ratio,
+        num_channels=3,
     ):
-        super().__init__()
-        self.vit = VisionTransformer(
-            img_size,
-            patch_size,
-            in_chans,
-            embed_dim,
-            depth,
-            num_heads,
-            mlp_ratio,
-            num_classes=1,
-            dropout_rate=dropout_rate,
+        super(HybridDiscriminator, self).__init__()
+        self.patch_embed = PatchEmbedding(img_size, patch_size, num_channels, embed_dim)
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
+        self.pos_embed = nn.Parameter(
+            torch.zeros(1, 1 + self.patch_embed.num_patches, embed_dim)
         )
-        # Apply spectral normalization to each linear layer in the Transformer
-        for module in self.modules():
-            if isinstance(module, nn.Linear):
-                spectral_norm(module)
+        self.pos_drop = nn.Dropout(0.1)
+
+        self.blocks = nn.ModuleList(
+            [
+                TransformerBlock(embed_dim, num_heads, mlp_ratio, dropout_rate=0.1)
+                for _ in range(depth)
+            ]
+        )
+        self.norm = nn.LayerNorm(embed_dim)
+        self.head = nn.Linear(embed_dim, 1)
 
     def forward(self, x):
-        x = self.vit(x)
+        B = x.shape[0]
+        x = self.patch_embed(x)
+        cls_tokens = self.cls_token.expand(B, -1, -1)
+        x = torch.cat((cls_tokens, x), dim=1)
+        x = x + self.pos_embed
+        x = self.pos_drop(x)
+
+        for blk in self.blocks:
+            x = blk(x)
+
+        x = self.norm(x)
+        x = self.head(x[:, 0])
         return x
 
 
-# GAN Architecture
-
-
-class ViTGAN(nn.Module):
+# Hybrid ViT-GAN
+class HybridViTGAN(nn.Module):
     def __init__(
         self,
         img_size,
         patch_size,
-        in_chans,
         embed_dim,
         depth,
         num_heads,
-        mlp_ratio=4.0,
-        dropout_rate=0.0,
+        mlp_ratio,
+        in_chans,
+        num_channels=3,
     ):
-        super().__init__()
-        self.generator = ViTGenerator(
-            img_size,
-            patch_size,
-            in_chans,
-            embed_dim,
-            depth,
-            num_heads,
-            mlp_ratio,
-            dropout_rate,
+        super(HybridViTGAN, self).__init__()
+        self.generator = HybridGenerator(
+            img_size, patch_size, embed_dim, depth, num_heads, mlp_ratio, num_channels, in_chans
         )
-        self.discriminator = ViTDiscriminator(
-            img_size,
-            patch_size,
-            in_chans,
-            embed_dim,
-            depth,
-            num_heads,
-            mlp_ratio,
-            dropout_rate,
+        self.discriminator = HybridDiscriminator(
+            img_size, patch_size, embed_dim, depth, num_heads, mlp_ratio, num_channels
         )
 
-    def forward(self, x):
-        generated_images = self.generator(x)
+    def forward(self, z):
+        generated_images = self.generator(z)
         discriminator_output = self.discriminator(generated_images)
         return generated_images, discriminator_output
 
 
+# Load pretrained discriminator weights
 def load_pretrained_discriminator(vit_gan):
-    # Load a pretrained Vision Transformer (ViT) model
     pretrained_vit = vit_b_16(weights=ViT_B_16_Weights.DEFAULT)
 
-    # Replace the last layer to match the discriminator's output
-    if hasattr(pretrained_vit, "fc"):  # Check if the last layer is named 'fc'
+    if hasattr(pretrained_vit, "fc"):
         pretrained_vit.fc = nn.Linear(pretrained_vit.fc.in_features, 1)
-    elif hasattr(
-        pretrained_vit, "classifier"
-    ):  # Sometimes the layer might be named 'classifier'
+    elif hasattr(pretrained_vit, "classifier"):
         pretrained_vit.classifier = nn.Linear(pretrained_vit.classifier.in_features, 1)
     else:
-        # If there's no head module, replace the linear layer directly
         pretrained_vit.heads.head = nn.Linear(pretrained_vit.heads.head.in_features, 1)
 
-    # Copy weights from the pretrained model to your discriminator
-    vit_gan.discriminator.vit.load_state_dict(pretrained_vit.state_dict(), strict=False)
-
+    vit_gan.discriminator.load_state_dict(pretrained_vit.state_dict(), strict=False)
     return vit_gan

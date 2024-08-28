@@ -10,7 +10,7 @@ import torchvision.utils as vutils
 import torch.nn.utils as utils
 import src.v2.modules as modules
 
-from typing import Optional, Union
+from typing import Any, Optional, Union
 from torch.optim.adam import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
@@ -26,7 +26,6 @@ from src.v2.utils import (
 )
 
 
-# Existing moving average class
 class MovingAverage:
     def __init__(self, alpha=0.9):
         self.alpha = alpha
@@ -42,27 +41,28 @@ class MovingAverage:
         return self.value if self.value is not None else 0.0
 
 
-# Existing early stopping class
 class EarlyStopping:
-    def __init__(self, patience=20, min_delta=5.0):
+    def __init__(self, patience=5, min_delta=2.0):
         self.patience = patience
         self.min_delta = min_delta
         self.counter = 0
         self.best_score = None
 
     def should_stop(self, current_score: float) -> bool:
+
         if self.best_score is None:
             self.best_score = current_score
             return False
-        elif current_score < self.best_score - self.min_delta:
+
+        if current_score < self.best_score - self.min_delta:
             self.best_score = current_score
             self.counter = 0
             return False
-        else:
-            self.counter += 1
-            if self.counter >= self.patience:
-                return True
-            return False
+
+        self.counter += 1
+        if self.counter >= self.patience:
+            return True
+        return False
 
 
 # New gradient penalty function for WGAN-GP
@@ -107,7 +107,7 @@ def run():
     img_size = 32
     patch_size = 8
     in_chans = 3
-    embed_dim = 256
+    embed_dim = 32
     no_of_transformer_blocks = 8
     num_heads = 8
     mlp_ratio = 4.0
@@ -117,7 +117,12 @@ def run():
     generator_learning_rate = 1e-5
     discriminator_learning_rate = 1e-5
     optimizer_betas = (0.5, 0.999)
-    noise_shape = in_chans, img_size, img_size
+    noise_shape = (
+        batch_size,
+        in_chans,
+        img_size,
+        img_size,
+    )  # Update to reflect latent_dim
     disc_weight_decay = 1e-4
     gen_weight_decay = 0
     lambda_gp = 10  # Gradient penalty coefficient
@@ -125,6 +130,12 @@ def run():
     if os.getenv("DEV", "0") == "1":
         batch_size = 64
         epochs = 100
+    noise_shape = (
+        batch_size,
+        in_chans,
+        img_size,
+        img_size,
+    )
 
     best_fid_score = float("inf")
     disc_losses = []
@@ -135,8 +146,14 @@ def run():
     disc_real_accuracies = []
     disc_fake_accuracies = []
 
-    def construct_noise():
-        return torch.randn(batch_size, *noise_shape, device=device)
+    def construct_noise(requested_batch_size=0):
+        return torch.randn(
+            batch_size if not requested_batch_size else requested_batch_size,
+            in_chans,
+            img_size,
+            img_size,
+            device=device,
+        )
 
     def denormalize(imgs):
         return imgs * 0.5 + 0.5
@@ -174,18 +191,16 @@ def run():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Initialize ViTGAN
-    vit_gan = modules.ViTGAN(
-        img_size,
-        patch_size,
-        in_chans,
-        embed_dim,
-        no_of_transformer_blocks,
-        num_heads,
-        mlp_ratio,
-        dropout_rate,
+    vit_gan = modules.HybridViTGAN(
+        img_size=img_size,
+        patch_size=patch_size,
+        embed_dim=embed_dim,
+        depth=no_of_transformer_blocks,
+        num_heads=num_heads,
+        mlp_ratio=mlp_ratio,
+        in_chans=in_chans,
     ).to(device)
 
-    vit_gan.apply(modules.weights_init)
     vit_gan = modules.load_pretrained_discriminator(vit_gan)
     vit_gan.train()
 
@@ -214,7 +229,7 @@ def run():
 
     # Initialize moving average and early stopping
     disc_loss_ma = MovingAverage(alpha=0.9)
-    early_stopping = EarlyStopping(patience=20, min_delta=50.0)
+    early_stopping = EarlyStopping(patience=20, min_delta=25.0)
 
     try:
         log(f"Starting training at: {str(datetime.datetime.now())}")
@@ -233,8 +248,9 @@ def run():
             f"  {generator_learning_rate=}\n"
             f"  {discriminator_learning_rate=}\n"
             f"  {optimizer_betas=}\n"
-            f"  {gen_weight_decay=}"
-            f"  {disc_weight_decay=}"
+            f"  {noise_shape=}\n"
+            f"  {gen_weight_decay=}\n"
+            f"  {disc_weight_decay=}\n"
             f"  {lambda_gp=}"
         )
         for epoch in range(epochs):
@@ -249,7 +265,7 @@ def run():
                     real_images
                 )
                 noisy_fake_images = vit_gan.generator(
-                    construct_noise()
+                    construct_noise(real_images.size(0))
                 ) + noise_level * torch.randn_like(real_images)
 
                 # Train Discriminator
@@ -403,8 +419,8 @@ def run():
                 plt.close()
     except KeyboardInterrupt as ke:
         log(f"{ke} raised!")
-    except Exception as e:
-        log(f"{e} raised!\n{traceback.format_exc()}")
+    # except Exception as e:`
+    #     log(f"{e} raised!\n{traceback.format_exc()}")`
     finally:
         model_path = os.path.join(SAVE_DIR, "final_model.ckpt")
         log(
