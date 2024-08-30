@@ -107,15 +107,15 @@ def run():
     img_size = 32
     patch_size = 8
     in_chans = 3
-    embed_dim = 32
+    embed_dim = 64
     no_of_transformer_blocks = 8
     num_heads = 8
     mlp_ratio = 4.0
     dropout_rate = 0.05
     batch_size = 256
     epochs = 10_000
-    generator_learning_rate = 1e-5
-    discriminator_learning_rate = 1e-5
+    generator_learning_rate = 5e-4
+    discriminator_learning_rate = 5e-4
     optimizer_betas = (0.5, 0.999)
     noise_shape = (
         batch_size,
@@ -175,6 +175,11 @@ def run():
     transform = transforms.Compose(
         [
             transforms.Resize((img_size, img_size)),
+            transforms.RandomHorizontalFlip(),  # Add random horizontal flip
+            transforms.RandomRotation(15),  # Add random rotation
+            transforms.ColorJitter(
+                brightness=0.2, contrast=0.2, saturation=0.2, hue=0.2
+            ),  # Add color jitter
             transforms.ToTensor(),
             transforms.Normalize((0.5,), (0.5,)),
         ]
