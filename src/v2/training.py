@@ -10,6 +10,7 @@ import torchvision.utils as vutils
 import torch.nn.utils as utils
 import src.v2.modules as modules
 
+
 from typing import Any, Optional, Union
 from torch.optim.adam import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -107,35 +108,30 @@ def run():
     img_size = 32
     patch_size = 8
     in_chans = 3
-    embed_dim = 32
-    no_of_transformer_blocks = 8
+    embed_dim = 512
+    no_of_transformer_blocks = 4
     num_heads = 8
     mlp_ratio = 4.0
     dropout_rate = 0.05
-    batch_size = 256
+    batch_size = 512
     epochs = 2000
-    generator_learning_rate = 1e-6
-    discriminator_learning_rate = 1e-6
+    generator_learning_rate = 5e-6
+    discriminator_learning_rate = 5e-6
     optimizer_betas = (0.5, 0.999)
-    noise_shape = (
-        batch_size,
-        in_chans,
-        img_size,
-        img_size,
-    )  # Update to reflect latent_dim
     disc_weight_decay = 1e-4
     gen_weight_decay = 0
     lambda_gp = 10  # Gradient penalty coefficient
 
     if os.getenv("DEV", "0") == "1":
-        batch_size = 64
+        batch_size = 512
         epochs = 100
-        noise_shape = (
-            batch_size,
-            in_chans,
-            img_size,
-            img_size,
-        )
+
+    noise_shape = (
+        batch_size,
+        in_chans,
+        img_size,
+        img_size,
+    )
 
     best_fid_score = float("inf")
     disc_losses = []
@@ -279,7 +275,7 @@ def run():
 
     # Initialize moving average and early stopping
     disc_loss_ma = MovingAverage(alpha=0.9)
-    early_stopping = EarlyStopping(patience=20, min_delta=25.0)
+    early_stopping = EarlyStopping(patience=20, min_delta=10.0)
 
     try:
         log(f"Starting training at: {str(datetime.datetime.now())}")
@@ -377,7 +373,7 @@ def run():
                     gen_losses.append(gen_loss.item())
                     gradient_norms_gen.append(gen_grad_norm)
 
-                if i % (len(train_loader) // 20) == 0:
+                if i % (len(train_loader) // 50) == 0:
                     with torch.no_grad():
                         noise = construct_noise()
                         fake_images = vit_gan.generator(noise).detach()
@@ -424,7 +420,7 @@ def run():
                         log(
                             f"Epoch [{epoch}/{epochs}], Step [{i}/{len(train_loader)}] | Disc Loss: {disc_loss.item():.8f}, Gen Loss: {gen_loss.item():.4f} | FID: {fid_score:.4f} | Disc Real Acc: {disc_real_acc:.4f} | Disc Fake Acc: {disc_fake_acc:.4f} | Grad Norm Gen: {gen_grad_norm:.4f} | Grad Norm Disc: {disc_grad_norm:.4f}"
                         )
-        if epoch % 10 == 0:  # Changed to correctly save plots at intervals
+        if epoch % 2 == 0:  # Changed to correctly save plots at intervals
             save_figures(
                 disc_losses=disc_losses,
                 gen_losses=gen_losses,
@@ -438,6 +434,10 @@ def run():
         log(f"{ke} raised!")
     except Exception as e:
         log(f"{e} raised!\n{traceback.format_exc()}")
+    finally:
+        log(
+            f"Run took {str(datetime.datetime.now() - START_TIME)}. Saving the model to: {model_path}"
+        )
         save_figures(
             disc_losses=disc_losses,
             gen_losses=gen_losses,
@@ -447,11 +447,9 @@ def run():
             disc_real_accuracies=disc_real_accuracies,
             disc_fake_accuracies=disc_fake_accuracies,
         )
-    finally:
         model_path = os.path.join(SAVE_DIR, "final_model.ckpt")
-        log(
-            f"Run took {str(datetime.datetime.now() - START_TIME)}. Saving the model to: {model_path}"
-        )
         torch.save(vit_gan.state_dict(), model_path)
         noise = construct_noise()
         save_samples(label=epoch, noise=noise)
+
+
