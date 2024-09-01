@@ -23,6 +23,7 @@ jupyter_client
 jupyter_core
 kiwisolver
 lightning-utilities
+ray[tune]
 lmdb
 Markdown
 matplotlib
