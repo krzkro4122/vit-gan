@@ -1,13 +1,13 @@
+from matplotlib import pyplot as plt
+from pydantic import BaseModel
+from torch.utils.data import DataLoader
+from torchmetrics.image.fid import FrechetInceptionDistance
 import datetime
 import os
-from torch.utils.data import DataLoader
-import torchvision.transforms as transforms
-import torchvision.datasets as datasets
-from pydantic import BaseModel
-import torch
 import rich
-from matplotlib import pyplot as plt
-from torchmetrics.image.fid import FrechetInceptionDistance
+import torch
+import torchvision.datasets as datasets
+import torchvision.transforms as transforms
 
 
 START_TIME = datetime.datetime.now()
@@ -15,29 +15,31 @@ BASE_DIR = os.getenv("SCRATCH", ".")
 OUTPUT_DIR = os.path.join(f"{BASE_DIR}", "output")
 SAVE_DIR = os.path.join(OUTPUT_DIR, START_TIME.strftime("%Y%m%d-%H%M%S"))
 IMAGES_DIR = os.path.join(SAVE_DIR, "images")
+NOISE_DIR = os.path.join(SAVE_DIR, "noise")
 CHECKPOINT_DIR = os.path.join(SAVE_DIR, "checkpoints")
 
 is_dev = int(os.getenv("DEV", "0"))
 
 
 class Config(BaseModel):
-    img_size: int = 32
-    patch_size: int = 8
-    in_chans: int = 3
-    no_of_transformer_blocks: int = 4
-    mlp_ratio: float = 4.0
+    attention_heads_count: int = 8
+    batch_size: int = 512
+    discriminator_learning_rate: float = 5e-6
+    discriminator_weight_decay: float = 1e-4
     dropout_rate: float = 0.05
+    embeddings_dimension: int = 512
     epochs: int = 2000
+    generator_learning_rate: float = 5e-6
+    generator_skips: int = 5
+    generator_weight_decay: int = 0
+    image_size: int = 32
+    input_chanels: int = 3
+    lambda_gp: int = 10
+    mlp_ratio: float = 4.0
     optimizer_beta1: float = 0.5
     optimizer_beta2: float = 0.999
-    disc_weight_decay: float = 1e-4
-    gen_weight_decay: int = 0
-    lambda_gp: int = 10
-    embed_dim: int = 512
-    num_heads: int = 8
-    batch_size: int = 512
-    generator_learning_rate: float = 5e-6
-    discriminator_learning_rate: float = 5e-6
+    patch_size: int = 8
+    transformer_blocks_count: int = 4
 
     def __str__(self):
         return "\n".join(repr(self)[repr(self).index("(") + 1 : -1].split(", "))
@@ -48,7 +50,10 @@ def save_figures(**kwargs):
     if kwargs.get("gen_losses") and kwargs.get("disc_losses"):
         plt.figure(figsize=(10, 5))
         plt.title("Generator and Discriminator Loss During Training")
-        plt.plot(kwargs["gen_losses"], label="G Loss")
+        generator_iterations = [
+            i * Config().generator_skips for i in range(len(kwargs["gen_losses"]))
+        ]
+        plt.plot(generator_iterations, kwargs["gen_losses"], label="G Loss")
         plt.plot(kwargs["disc_losses"], label="D Loss")
         plt.xlabel("Iterations")
         plt.ylabel("Loss")
@@ -69,7 +74,12 @@ def save_figures(**kwargs):
     if kwargs.get("gradient_norms_gen") and kwargs.get("gradient_norms_disc"):
         plt.figure(figsize=(10, 5))
         plt.title("Gradient Norms During Training")
-        plt.plot(kwargs["gradient_norms_gen"], label="Gen Grad Norm")
+        generator_iterations = [
+            i * Config().generator_skips for i in range(len(kwargs["gen_losses"]))
+        ]
+        plt.plot(
+            generator_iterations, kwargs["gradient_norms_gen"], label="Gen Grad Norm"
+        )
         plt.plot(kwargs["gradient_norms_disc"], label="Disc Grad Norm")
         plt.xlabel("Iterations")
         plt.ylabel("Gradient Norm")
@@ -92,7 +102,7 @@ def save_figures(**kwargs):
 def get_data_loader(c: Config):
     transform = transforms.Compose(
         [
-            transforms.Resize((c.img_size, c.img_size)),
+            transforms.Resize((c.image_size, c.image_size)),
             transforms.RandomHorizontalFlip(),
             transforms.RandomRotation(45),
             transforms.ColorJitter(
@@ -109,7 +119,11 @@ def get_data_loader(c: Config):
         transform=transform,
     )
     return DataLoader(
-        train_dataset, batch_size=c.batch_size, shuffle=True, num_workers=4
+        train_dataset,
+        batch_size=c.batch_size,
+        shuffle=True,
+        num_workers=4,
+        drop_last=True,
     )
 
 
@@ -162,7 +176,7 @@ def evaluate_fid(vit_gan, data_loader, device, fid_scores):
 
     fid_score = fid.compute()
     fid_score_cpu = fid_score.cpu().item()
-    fid_scores.append(fid_score)
+    fid_scores.append(fid_score_cpu)
     vit_gan.train()
     return fid_score.to(device)
 
@@ -171,6 +185,7 @@ def construct_directories():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     os.makedirs(SAVE_DIR, exist_ok=True)
     os.makedirs(IMAGES_DIR, exist_ok=True)
+    os.makedirs(NOISE_DIR, exist_ok=True)
     os.makedirs(CHECKPOINT_DIR, exist_ok=True)
 
 
