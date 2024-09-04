@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from src.v2.utils import Config
 
 from typing import Optional
 from torchvision.models import vit_b_16, ViT_B_16_Weights
@@ -45,14 +46,14 @@ class EarlyStopping:
 
 
 class PatchEmbedding(nn.Module):
-    def __init__(self, img_size, patch_size, in_chans, embed_dim):
+    def __init__(self, image_size, patch_size, input_channels, embeddings_dimension):
         super(PatchEmbedding, self).__init__()
-        self.img_size = img_size
+        self.image_size = image_size
         self.patch_size = patch_size
-        self.num_patches = (img_size // patch_size) ** 2
-        self.embed_dim = embed_dim
-        self.patch_dim = patch_size * patch_size * in_chans
-        self.proj = nn.Linear(self.patch_dim, embed_dim)
+        self.num_patches = (image_size // patch_size) ** 2
+        self.embeddings_dimension = embeddings_dimension
+        self.patch_dim = patch_size * patch_size * input_channels
+        self.proj = nn.Linear(self.patch_dim, embeddings_dimension)
 
     def forward(self, x):
         B, C, H, W = x.shape
@@ -71,10 +72,10 @@ class PatchEmbedding(nn.Module):
 
 # Define an attention mechanism
 class Attention(nn.Module):
-    def __init__(self, dim, num_heads):
+    def __init__(self, dim, attention_heads_count):
         super(Attention, self).__init__()
-        self.num_heads = num_heads
-        self.head_dim = dim // num_heads
+        self.attention_heads_count = attention_heads_count
+        self.head_dim = dim // attention_heads_count
         self.scale = self.head_dim**-0.5
 
         self.qkv = nn.Linear(dim, dim * 3, bias=False)
@@ -82,7 +83,7 @@ class Attention(nn.Module):
 
     def forward(self, x):
         B, N, C = x.shape
-        qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim)
+        qkv = self.qkv(x).reshape(B, N, 3, self.attention_heads_count, self.head_dim)
         qkv = qkv.permute(2, 0, 3, 1, 4)
         q, k, v = qkv[0], qkv[1], qkv[2]
 
@@ -117,10 +118,12 @@ class MLP(nn.Module):
 
 # Define the Transformer Block
 class TransformerBlock(nn.Module):
-    def __init__(self, dim, num_heads, mlp_ratio=4.0, dropout_rate=0.0, noise_std=0.1):
+    def __init__(
+        self, dim, attention_heads_count, mlp_ratio=4.0, dropout_rate=0.0, noise_std=0.1
+    ):
         super(TransformerBlock, self).__init__()
         self.norm1 = nn.LayerNorm(dim)
-        self.attn = Attention(dim, num_heads)
+        self.attn = Attention(dim, attention_heads_count)
         self.norm2 = nn.LayerNorm(dim)
         self.mlp = MLP(
             dim, hidden_features=int(dim * mlp_ratio), dropout_rate=dropout_rate
@@ -140,32 +143,36 @@ class TransformerBlock(nn.Module):
 class VisionTransformer(nn.Module):
     def __init__(
         self,
-        img_size,
+        image_size,
         patch_size,
-        in_chans,
-        embed_dim,
+        input_channels,
+        embeddings_dimension,
         depth,
-        num_heads,
+        attention_heads_count,
         mlp_ratio=4.0,
-        num_classes=1000,
         dropout_rate=0.0,
+        num_classes=1000,
     ):
         super(VisionTransformer, self).__init__()
-        self.patch_embed = PatchEmbedding(img_size, patch_size, in_chans, embed_dim)
-        self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
+        self.patch_embed = PatchEmbedding(
+            image_size, patch_size, input_channels, embeddings_dimension
+        )
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, embeddings_dimension))
         self.pos_embed = nn.Parameter(
-            torch.zeros(1, 1 + self.patch_embed.num_patches, embed_dim)
+            torch.zeros(1, 1 + self.patch_embed.num_patches, embeddings_dimension)
         )
         self.pos_drop = nn.Dropout(p=dropout_rate)
 
         self.blocks = nn.ModuleList(
             [
-                TransformerBlock(embed_dim, num_heads, mlp_ratio, dropout_rate)
+                TransformerBlock(
+                    embeddings_dimension, attention_heads_count, mlp_ratio, dropout_rate
+                )
                 for _ in range(depth)
             ]
         )
-        self.norm = nn.LayerNorm(embed_dim)
-        self.head = nn.Linear(embed_dim, num_classes)
+        self.norm = nn.LayerNorm(embeddings_dimension)
+        self.head = nn.Linear(embeddings_dimension, num_classes)
 
     def forward(self, x):
         B = x.shape[0]
@@ -188,45 +195,53 @@ class VisionTransformer(nn.Module):
 class HybridGenerator(nn.Module):
     def __init__(
         self,
-        img_size,
-        patch_size,
-        embed_dim,
-        depth,
-        num_heads,
-        mlp_ratio,
-        in_chans,
-        num_channels=3,
+        config: Config,
     ):
         super(HybridGenerator, self).__init__()
-        self.init_size = img_size // 4  # Start with a quarter of the target size
-        self.embed_dim = embed_dim
+        self.init_size = (
+            config.image_size // 4
+        )  # Start with a quarter of the target size
+        self.embeddings_dimension = config.embeddings_dimension
         self.linear = nn.Linear(
-            in_chans * img_size * img_size, embed_dim * self.init_size * self.init_size
+            config.input_channels * config.image_size * config.image_size,
+            config.embeddings_dimension * self.init_size * self.init_size,
         )
         self.transformer_blocks = nn.ModuleList(
-            [TransformerBlock(embed_dim, num_heads, mlp_ratio) for _ in range(depth)]
+            [
+                TransformerBlock(
+                    config.embeddings_dimension,
+                    config.attention_heads_count,
+                    config.mlp_ratio,
+                )
+                for _ in range(config.transformer_blocks_count)
+            ]
         )
         self.upsample_blocks = nn.ModuleList(
             [
-                UpSampleBlock(embed_dim, embed_dim // 2),
-                UpSampleBlock(embed_dim // 2, embed_dim // 4),
+                UpSampleBlock(
+                    config.embeddings_dimension, config.embeddings_dimension // 2
+                ),
+                UpSampleBlock(
+                    config.embeddings_dimension // 2, config.embeddings_dimension // 4
+                ),
             ]
         )
         self.final_conv = nn.Conv2d(
-            embed_dim // 4, num_channels, kernel_size=3, padding=1
+            config.embeddings_dimension // 4,
+            config.input_channel,
+            kernel_size=3,
+            padding=1,
         )
         self.tanh = nn.Tanh()
 
     def forward(self, z):
         # Flatten the spatial dimensions
         batch_size, channels, height, width = z.shape
-        z = z.view(
-            batch_size, -1
-        )  # Shape: (batch_size, in_chans * img_size * img_size)
+        z = z.view(batch_size, -1)  # Shape: (batch_size, config.input_channels)
 
         # Pass through the linear layer to get the desired embedding
         x = self.linear(z).view(
-            batch_size, self.embed_dim, self.init_size, self.init_size
+            batch_size, self.embeddings_dimension, self.init_size, self.init_size
         )
 
         # Continue with the rest of the forward pass
@@ -239,6 +254,94 @@ class HybridGenerator(nn.Module):
         for upsample in self.upsample_blocks:
             x = upsample(x)
         return self.tanh(self.final_conv(x))
+
+
+class Generator(nn.Module):
+    def __init__(self, config: Config):
+        super(Generator, self).__init__()
+
+        self.main = nn.Sequential(
+            # Input is (batch_size, input_channels, image_size, image_size)
+            nn.Conv2d(
+                config.input_channels,
+                64,
+                kernel_size=4,
+                stride=2,
+                padding=1,
+                bias=False,
+            ),
+            nn.BatchNorm2d(64),
+            nn.ReLU(True),
+            # (64, 16, 16)
+            nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(128),
+            nn.ReLU(True),
+            # (128, 8, 8)
+            nn.Conv2d(128, 256, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(256),
+            nn.ReLU(True),
+            # (256, 4, 4)
+            nn.ConvTranspose2d(
+                256, 128, kernel_size=4, stride=2, padding=1, bias=False
+            ),
+            nn.BatchNorm2d(128),
+            nn.ReLU(True),
+            # (128, 8, 8)
+            nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(64),
+            nn.ReLU(True),
+            # (64, 16, 16)
+            nn.ConvTranspose2d(
+                64,
+                config.input_channels,
+                kernel_size=4,
+                stride=2,
+                padding=1,
+                bias=False,
+            ),
+            nn.Tanh(),
+            # Output is (input_channels, image_size, image_size)
+        )
+
+    def forward(self, input):
+        return self.main(input)
+
+
+class Discriminator(nn.Module):
+    def __init__(self, config: Config):
+        super(Discriminator, self).__init__()
+
+        self.main = nn.Sequential(
+            # Input is (batch_size, input_channels, image_size, image_size)
+            nn.Conv2d(
+                config.input_channels,
+                64,
+                kernel_size=4,
+                stride=2,
+                padding=1,
+                bias=False,
+            ),
+            nn.LeakyReLU(0.2, inplace=True),
+            # (64, 16, 16)
+            nn.Conv2d(64, 128, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(128),
+            nn.LeakyReLU(0.2, inplace=True),
+            # (128, 8, 8)
+            nn.Conv2d(128, 256, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(256),
+            nn.LeakyReLU(0.2, inplace=True),
+            # (256, 4, 4)
+            nn.Conv2d(256, 512, kernel_size=4, stride=2, padding=1, bias=False),
+            nn.BatchNorm2d(512),
+            nn.LeakyReLU(0.2, inplace=True),
+            # (512, 2, 2) - Reduced stride to avoid shrinking too much
+            nn.Conv2d(512, 1, kernel_size=2, stride=1, padding=0, bias=False),
+            # Output is (batch_size, 1, 1, 1)
+            nn.Sigmoid(),
+        )
+
+    def forward(self, input):
+        return self.main(input).view(-1, 1).squeeze(1)
 
 
 class UpSampleBlock(nn.Module):
@@ -261,32 +364,35 @@ class UpSampleBlock(nn.Module):
 
 # Define the HybridDiscriminator
 class HybridDiscriminator(nn.Module):
-    def __init__(
-        self,
-        img_size,
-        patch_size,
-        embed_dim,
-        depth,
-        num_heads,
-        mlp_ratio,
-        num_channels=3,
-    ):
+    def __init__(self, config: Config):
         super(HybridDiscriminator, self).__init__()
-        self.patch_embed = PatchEmbedding(img_size, patch_size, num_channels, embed_dim)
-        self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
+        self.patch_embed = PatchEmbedding(
+            config.image_size,
+            config.patch_size,
+            config.input_channels,
+            config.embeddings_dimension,
+        )
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, config.embeddings_dimension))
         self.pos_embed = nn.Parameter(
-            torch.zeros(1, 1 + self.patch_embed.num_patches, embed_dim)
+            torch.zeros(
+                1, 1 + self.patch_embed.num_patches, config.embeddings_dimension
+            )
         )
         self.pos_drop = nn.Dropout(0.1)
 
         self.blocks = nn.ModuleList(
             [
-                TransformerBlock(embed_dim, num_heads, mlp_ratio, dropout_rate=0.1)
-                for _ in range(depth)
+                TransformerBlock(
+                    config.embeddings_dimension,
+                    config.attention_heads_count,
+                    config.mlp_ratio,
+                    dropout_rate=0.1,
+                )
+                for _ in range(config.transformer_blocks_count)
             ]
         )
-        self.norm = nn.LayerNorm(embed_dim)
-        self.head = nn.Linear(embed_dim, 1)
+        self.norm = nn.LayerNorm(config.embeddings_dimension)
+        self.head = nn.Linear(config.embeddings_dimension, 1)
 
     def forward(self, x):
         B = x.shape[0]
@@ -304,33 +410,29 @@ class HybridDiscriminator(nn.Module):
         return x
 
 
-# Hybrid ViT-GAN
 class HybridViTGAN(nn.Module):
     def __init__(
         self,
-        img_size,
-        patch_size,
-        embed_dim,
-        depth,
-        num_heads,
-        mlp_ratio,
-        in_chans,
-        num_channels=3,
+        config: Config,
     ):
-        super(HybridViTGAN, self).__init__()
-        self.generator = HybridGenerator(
-            img_size,
-            patch_size,
-            embed_dim,
-            depth,
-            num_heads,
-            mlp_ratio,
-            num_channels,
-            in_chans,
-        )
-        self.discriminator = HybridDiscriminator(
-            img_size, patch_size, embed_dim, depth, num_heads, mlp_ratio, num_channels
-        )
+        super().__init__()
+        self.generator = HybridGenerator(config)
+        self.discriminator = HybridDiscriminator(config)
+
+    def forward(self, z):
+        generated_images = self.generator(z)
+        discriminator_output = self.discriminator(generated_images)
+        return generated_images, discriminator_output
+
+
+class CNNGAN(nn.Module):
+    def __init__(
+        self,
+        config: Config,
+    ):
+        super().__init__()
+        self.generator = Generator(config)
+        self.discriminator = Discriminator(config)
 
     def forward(self, z):
         generated_images = self.generator(z)

@@ -15,7 +15,7 @@ def test():
     vit_gan = ViTGAN(
         c.image_size,
         c.patch_size,
-        c.input_chanels,
+        c.input_channels,
         c.embeddings_dimension,
         c.transformer_blocks_count,
         c.attention_heads_count,
@@ -40,7 +40,7 @@ def test():
     def construct_noise():
         return torch.randn(
             c.batch_size,
-            c.input_chanels,
+            c.input_channels,
             c.image_size,
             c.image_size,
             device=device,

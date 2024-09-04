@@ -24,6 +24,7 @@ from src.v2.utils import (
     construct_directories,
     SAVE_DIR,
     START_TIME,
+    INPUT_DIR,
     IMAGES_DIR,
     save_figures,
 )
@@ -33,7 +34,7 @@ def train_model(config: Optional[dict[str, Any]] = None):
     def construct_noise():
         return torch.randn(
             c.batch_size,
-            c.input_chanels,
+            c.input_channels,
             c.image_size,
             c.image_size,
             device=device,
@@ -58,6 +59,10 @@ def train_model(config: Optional[dict[str, Any]] = None):
         save_path = os.path.join(NOISE_DIR, f"noise_epoch_{label}.png")
         save_images(save_path, noise)
 
+    def save_input(label: Union[str, int], images: torch.Tensor):
+        save_path = os.path.join(INPUT_DIR, f"input_epoch_{label}.png")
+        save_images(save_path, images)
+
     def train_generator():
         gen_optimizer.zero_grad()
         fake_images = vit_gan.generator(construct_noise())
@@ -79,7 +84,7 @@ def train_model(config: Optional[dict[str, Any]] = None):
 
         return loss, grad_norm
 
-    def train_discriminator():
+    def train_on_real_data():
         noise_level = 0.1
         noisy_real_images = real_images + noise_level * torch.randn_like(real_images)
         noise = construct_noise()
@@ -136,15 +141,7 @@ def train_model(config: Optional[dict[str, Any]] = None):
     data_loader = get_data_loader(c)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    vit_gan = modules.HybridViTGAN(
-        img_size=c.image_size,
-        patch_size=c.patch_size,
-        embed_dim=c.embeddings_dimension,
-        depth=c.transformer_blocks_count,
-        num_heads=c.attention_heads_count,
-        mlp_ratio=c.mlp_ratio,
-        in_chans=c.input_chanels,
-    ).to(device)
+    vit_gan = modules.CNNGAN(c).to(device)
 
     vit_gan = modules.load_pretrained_discriminator(vit_gan)
     vit_gan.train()
@@ -182,10 +179,13 @@ def train_model(config: Optional[dict[str, Any]] = None):
             save_samples(label=epoch, noise=noise)
 
             for i, (real_images, _) in enumerate(data_loader):
+                if i == 0:
+                    save_input(label=epoch, images=real_images)
+
                 real_images = real_images.to(device)
 
                 disc_loss, disc_grad_norm, disc_fake_acc, disc_real_acc = (
-                    train_discriminator()
+                    train_on_real_data()
                 )
 
                 if i % c.generator_skips == 0:

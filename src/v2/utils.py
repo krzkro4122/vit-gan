@@ -15,6 +15,7 @@ BASE_DIR = os.getenv("SCRATCH", ".")
 OUTPUT_DIR = os.path.join(f"{BASE_DIR}", "output")
 SAVE_DIR = os.path.join(OUTPUT_DIR, START_TIME.strftime("%Y%m%d-%H%M%S"))
 IMAGES_DIR = os.path.join(SAVE_DIR, "images")
+INPUT_DIR = os.path.join(SAVE_DIR, "input")
 NOISE_DIR = os.path.join(SAVE_DIR, "noise")
 CHECKPOINT_DIR = os.path.join(SAVE_DIR, "checkpoints")
 
@@ -24,16 +25,16 @@ is_dev = int(os.getenv("DEV", "0"))
 class Config(BaseModel):
     attention_heads_count: int = 8
     batch_size: int = 512
-    discriminator_learning_rate: float = 5e-6
+    discriminator_learning_rate: float = 5e-5
     discriminator_weight_decay: float = 1e-4
     dropout_rate: float = 0.05
     embeddings_dimension: int = 512
     epochs: int = 2000
-    generator_learning_rate: float = 5e-6
-    generator_skips: int = 5
+    generator_learning_rate: float = 5e-5
+    generator_skips: int = 1
     generator_weight_decay: int = 0
     image_size: int = 32
-    input_chanels: int = 3
+    input_channels: int = 3
     lambda_gp: int = 10
     mlp_ratio: float = 4.0
     optimizer_beta1: float = 0.5
@@ -185,6 +186,7 @@ def construct_directories():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     os.makedirs(SAVE_DIR, exist_ok=True)
     os.makedirs(IMAGES_DIR, exist_ok=True)
+    os.makedirs(INPUT_DIR, exist_ok=True)
     os.makedirs(NOISE_DIR, exist_ok=True)
     os.makedirs(CHECKPOINT_DIR, exist_ok=True)
 
