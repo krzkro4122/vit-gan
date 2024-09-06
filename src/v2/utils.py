@@ -23,31 +23,27 @@ is_dev = int(os.getenv("DEV", "0"))
 
 
 class Config(BaseModel):
-    attention_heads_count: int = 8
-    batch_size: int = 512
-    discriminator_learning_rate: float = 5e-5
-    discriminator_weight_decay: float = 1e-4
-    dropout_rate: float = 0.05
-    embeddings_dimension: int = 512
-    epochs: int = 2000
-    generator_learning_rate: float = 5e-5
-    generator_skips: int = 1
-    generator_weight_decay: int = 0
+    attention_heads_count: int = 4
+    batch_size: int = 64
+    classes_count: int = 10
+    discriminator_learning_rate: float = 5e-4
+    dropout_rate: float = 0.1
+    embeddings_dimension: int = 128
+    epochs: int = 500
+    generator_learning_rate: float = 5e-4
     image_size: int = 32
     input_channels: int = 3
-    lambda_gp: int = 10
-    mlp_ratio: float = 4.0
+    mlp_ratio: int = 2
     optimizer_beta1: float = 0.5
     optimizer_beta2: float = 0.999
-    patch_size: int = 8
-    transformer_blocks_count: int = 4
+    patch_size: int = 4
+    transformer_blocks_count: int = 6
 
     def __str__(self):
         return "\n".join(repr(self)[repr(self).index("(") + 1 : -1].split(", "))
 
 
 def save_figures(**kwargs):
-    log("Saving figures...")
     if kwargs.get("gen_losses") and kwargs.get("disc_losses"):
         plt.figure(figsize=(10, 5))
         plt.title("Generator and Discriminator Loss During Training")
@@ -103,14 +99,11 @@ def save_figures(**kwargs):
 def get_data_loader(c: Config):
     transform = transforms.Compose(
         [
-            transforms.Resize((c.image_size, c.image_size)),
-            transforms.RandomHorizontalFlip(),
-            transforms.RandomRotation(45),
-            transforms.ColorJitter(
-                brightness=0.1, contrast=0.1, saturation=0.1, hue=0.1
-            ),
+            transforms.Resize(c.image_size),
             transforms.ToTensor(),
-            transforms.Normalize((0.5,), (0.5,)),
+            transforms.Normalize(
+                [0.5] * c.input_channels, [0.5] * c.input_channels
+            ),  # Normalize to [-1, 1]
         ]
     )
     train_dataset = datasets.CIFAR10(

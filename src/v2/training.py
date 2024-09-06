@@ -7,10 +7,11 @@ from ray import tune
 import ray
 import torchvision.utils as vutils
 import torch.nn.utils as utils
+from torch import nn
+import torch.optim as optim
 import src.v2.modules as modules
 from ray import tune
 from typing import Any, Optional, Union
-from torch.optim import AdamW
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from src.v2.utils import (
     CHECKPOINT_DIR,
@@ -50,7 +51,7 @@ def train_model(config: Optional[dict[str, Any]] = None):
 
     def save_samples(label: Union[str, int], noise: torch.Tensor):
         with torch.no_grad():
-            image_samples = vit_gan.generator(noise).detach().cpu()
+            image_samples = gan.generator(noise).detach().cpu()
             image_samples = denormalize(image_samples)
             save_path = os.path.join(IMAGES_DIR, f"samples_epoch_{label}.png")
             save_images(save_path, image_samples)
@@ -65,20 +66,20 @@ def train_model(config: Optional[dict[str, Any]] = None):
 
     def train_generator():
         gen_optimizer.zero_grad()
-        fake_images = vit_gan.generator(construct_noise())
-        output = vit_gan.discriminator(fake_images).view(-1)
+        fake_images = gan.generator(construct_noise())
+        output = gan.discriminator(fake_images).view(-1)
 
         loss = -torch.mean(output)
         div_loss = diversity_loss(fake_images)
         total_gen_loss = loss + 0.1 * div_loss
 
         total_gen_loss.backward()
-        utils.clip_grad_norm_(vit_gan.generator.parameters(), max_norm=0.5)
+        utils.clip_grad_norm_(gan.generator.parameters(), max_norm=0.5)
         gen_optimizer.step()
 
         gen_losses.append(loss.item())
         grad_norm = sum(
-            p.grad.detach().norm().item() for p in vit_gan.generator.parameters()
+            p.grad.detach().norm().item() for p in gan.generator.parameters()
         )
         gradient_norms_gen.append(grad_norm)
 
@@ -89,23 +90,23 @@ def train_model(config: Optional[dict[str, Any]] = None):
         noisy_real_images = real_images + noise_level * torch.randn_like(real_images)
         noise = construct_noise()
 
-        noisy_fake_images = vit_gan.generator(noise).detach().to(
+        noisy_fake_images = gan.generator(noise).detach().to(
             device
         ) + noise_level * torch.randn_like(real_images)
 
         disc_optimizer.zero_grad()
-        real_output = vit_gan.discriminator(noisy_real_images).view(-1)
-        fake_output = vit_gan.discriminator(noisy_fake_images).view(-1)
+        real_output = gan.discriminator(noisy_real_images).view(-1)
+        fake_output = gan.discriminator(noisy_fake_images).view(-1)
 
         loss = -(torch.mean(real_output) - torch.mean(fake_output))
 
         gp = gradient_penalty(
-            vit_gan.discriminator, noisy_real_images, noisy_fake_images, device
+            gan.discriminator, noisy_real_images, noisy_fake_images, device
         )
         loss += c.lambda_gp * gp
 
         loss.backward()
-        utils.clip_grad_norm_(vit_gan.discriminator.parameters(), max_norm=5.0)
+        utils.clip_grad_norm_(gan.discriminator.parameters(), max_norm=5.0)
         disc_optimizer.step()
 
         disc_loss_ma.update(loss.item())
@@ -117,7 +118,7 @@ def train_model(config: Optional[dict[str, Any]] = None):
         disc_fake_accuracies.append(fake_accuracy)
 
         grad_norm = sum(
-            p.grad.detach().norm().item() for p in vit_gan.discriminator.parameters()
+            p.grad.detach().norm().item() for p in gan.discriminator.parameters()
         )
         gradient_norms_disc.append(grad_norm)
 
@@ -141,33 +142,21 @@ def train_model(config: Optional[dict[str, Any]] = None):
     data_loader = get_data_loader(c)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    vit_gan = modules.CNNGAN(c).to(device)
+    gan = modules.ViTGAN(c).to(device)
 
-    vit_gan = modules.load_pretrained_discriminator(vit_gan)
-    vit_gan.train()
+    # gan = modules.load_pretrained_discriminator(gan)
+    gan.train()
 
-    gen_optimizer = AdamW(
-        vit_gan.generator.parameters(),
-        lr=c.generator_learning_rate,
-        betas=(c.optimizer_beta1, c.optimizer_beta2),
-        weight_decay=c.generator_weight_decay,
+    gen_optimizer = optim.AdamW(
+        gan.generator.parameters(), lr=c.generator_learning_rate, weight_decay=1e-3
     )
-    disc_optimizer = AdamW(
-        vit_gan.discriminator.parameters(),
+    disc_optimizer = optim.AdamW(
+        gan.discriminator.parameters(),
         lr=c.discriminator_learning_rate,
-        betas=(c.optimizer_beta1, c.optimizer_beta2),
-        weight_decay=c.discriminator_weight_decay,
+        weight_decay=1e-3,
     )
 
-    gen_scheduler = ReduceLROnPlateau(
-        gen_optimizer, mode="min", factor=0.5, patience=5, threshold=0.01, min_lr=1e-6
-    )
-    disc_scheduler = ReduceLROnPlateau(
-        disc_optimizer, mode="min", factor=0.5, patience=5, threshold=0.01, min_lr=1e-6
-    )
-
-    disc_loss_ma = modules.MovingAverage(alpha=0.9)
-    early_stopping = modules.EarlyStopping(patience=20, min_delta=10.0)
+    criterion = nn.CrossEntropyLoss()
 
     try:
         log(f"Starting training at: {str(datetime.datetime.now())}")
@@ -182,16 +171,46 @@ def train_model(config: Optional[dict[str, Any]] = None):
                 if i == 0:
                     save_input(label=epoch, images=real_images)
 
+                real_images: torch.Tensor = real_images.to(device)
+
+                # Real data
+                gan.discriminator.zero_grad()
                 real_images = real_images.to(device)
+                batch_size = real_images.size(0)
+                real_labels = torch.ones(batch_size, device=device).unsqueeze(1)
 
-                disc_loss, disc_grad_norm, disc_fake_acc, disc_real_acc = (
-                    train_on_real_data()
-                )
+                output = gan.discriminator(real_images)
+                loss_real = criterion(output, real_labels)
+                loss_real.backward()
 
-                if i % c.generator_skips == 0:
-                    gen_loss, gen_grad_norm = train_generator()
+                # Fake
+                fake_images = gan.generator(construct_noise())
+                fake_labels = torch.zeros(batch_size, device=device).unsqueeze(1)
 
-            fid_score = evaluate_fid(vit_gan, data_loader, device, fid_scores)
+                output = gan.discriminator(
+                    fake_images.detach()
+                )  # Detach to avoid gradient calculation on Generator
+                loss_fake = criterion(output, fake_labels)
+                loss_fake.backward()
+
+                disc_loss = loss_real + loss_fake
+                disc_optimizer.step()  # Update Discriminator
+
+                gan.generator.zero_grad()
+                fake_labels.fill_(1).unsqueeze(
+                    1
+                )  # Generator wants to trick the Discriminator, so use real labels (1s)
+
+                output = gan.discriminator(
+                    fake_images
+                )  # Forward pass through Discriminator with fake images
+                lossG = criterion(
+                    output, fake_labels
+                )  # Generator loss (trying to fool Discriminator)
+                lossG.backward()
+                gen_optimizer.step()  # Update Generator
+
+            fid_score = evaluate_fid(gan, data_loader, device, fid_scores)
 
             # gen_scheduler.step(fid_score)
             # disc_scheduler.step(fid_score)
@@ -199,22 +218,23 @@ def train_model(config: Optional[dict[str, Any]] = None):
             if fid_score < best_fid_score:
                 best_fid_score = fid_score
                 torch.save(
-                    vit_gan.state_dict(),
+                    gan.state_dict(),
                     os.path.join(
                         CHECKPOINT_DIR,
                         f"best_model_epoch_{epoch}_fid_{int(fid_score)}.pth",
                     ),
                 )
             log(
-                f"Epoch [{epoch}/{c.epochs}] | Disc Loss: {disc_loss.item():.8f}, Gen Loss: {gen_loss.item():.4f} | FID: {fid_score:.4f} | Disc Real Acc: {disc_real_acc:.4f} | Disc Fake Acc: {disc_fake_acc:.4f} | Grad Norm Gen: {gen_grad_norm:.4f} | Grad Norm Disc: {disc_grad_norm:.4f}"
+                f"Epoch [{epoch}/{c.epochs}] | Disc Loss: {disc_loss.item():.8f}, Gen Loss: {lossG.item():.4f} | FID: {fid_score:.4f}"
+                # f"| Disc Real Acc: {disc_real_acc:.4f} | Disc Fake Acc: {disc_fake_acc:.4f} | Grad Norm Gen: {gen_grad_norm:.4f} | Grad Norm Disc: {disc_grad_norm:.4f}"
             )
 
             if config:
                 tune.report(fid_score=fid_score)
 
-            if early_stopping.should_stop(fid_score):
-                log(f"Early stopping triggered at epoch {epoch} with FID: {fid_score}")
-                break
+            # if early_stopping.should_stop(fid_score):
+            #     log(f"Early stopping triggered at epoch {epoch} with FID: {fid_score}")
+            #     break
 
             save_figures(
                 disc_losses=disc_losses,
@@ -240,7 +260,7 @@ def train_model(config: Optional[dict[str, Any]] = None):
             disc_fake_accuracies=disc_fake_accuracies,
         )
         model_path = os.path.join(SAVE_DIR, "final_model.ckpt")
-        torch.save(vit_gan.state_dict(), model_path)
+        torch.save(gan.state_dict(), model_path)
         noise = construct_noise()
         save_samples(label=epoch, noise=noise)
         log(

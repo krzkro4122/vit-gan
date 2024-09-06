@@ -45,215 +45,212 @@ class EarlyStopping:
         return False
 
 
-class PatchEmbedding(nn.Module):
-    def __init__(self, image_size, patch_size, input_channels, embeddings_dimension):
-        super(PatchEmbedding, self).__init__()
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_patches = (image_size // patch_size) ** 2
-        self.embeddings_dimension = embeddings_dimension
-        self.patch_dim = patch_size * patch_size * input_channels
-        self.proj = nn.Linear(self.patch_dim, embeddings_dimension)
+import torch
+import torch.nn as nn
+
+
+# B -> Batch Size
+# C -> Number of Input Channels
+# IH -> Image Height
+# IW -> Image Width
+# P -> Patch Size
+# E -> Embedding Dimension
+# N -> Number of Patches = IH/P * IW/P
+# S -> Sequence Length   = IH/P * IW/P + 1 or N + 1 (extra 1 is of Classification Token)
+# Q -> Query Sequence length (equal to S for self-attention)
+# K -> Key Sequence length   (equal to S for self-attention)
+# V -> Value Sequence length (equal to S for self-attention)
+# H -> Number of heads
+# HE -> Head Embedding Dimension = E/H
+
+
+class EmbedLayer(nn.Module):
+    def __init__(self, n_channels, embed_dim, image_size, patch_size, dropout=0.0):
+        super().__init__()
+        self.conv1 = nn.Conv2d(
+            n_channels, embed_dim, kernel_size=patch_size, stride=patch_size
+        )  # Patch Encoding
+        self.pos_embedding = nn.Parameter(
+            torch.zeros(1, (image_size // patch_size) ** 2, embed_dim),
+            requires_grad=True,
+        )  # Learnable Positional Embedding
+        self.cls_token = nn.Parameter(
+            torch.zeros(1, 1, embed_dim), requires_grad=True
+        )  # Classification Token
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
-        B, C, H, W = x.shape
+        B = x.shape[0]
+        x = self.conv1(
+            x
+        )  # B, C, IH, IW     -> B, E, IH/P, IW/P                Split image into the patches and embed patches
         x = x.reshape(
-            B,
-            C,
-            H // self.patch_size,
-            self.patch_size,
-            W // self.patch_size,
-            self.patch_size,
-        )
-        x = x.permute(0, 2, 4, 3, 5, 1).reshape(B, -1, self.patch_dim)
-        x = self.proj(x)
-        return x
-
-
-# Define an attention mechanism
-class Attention(nn.Module):
-    def __init__(self, dim, attention_heads_count):
-        super(Attention, self).__init__()
-        self.attention_heads_count = attention_heads_count
-        self.head_dim = dim // attention_heads_count
-        self.scale = self.head_dim**-0.5
-
-        self.qkv = nn.Linear(dim, dim * 3, bias=False)
-        self.proj = nn.Linear(dim, dim)
-
-    def forward(self, x):
-        B, N, C = x.shape
-        qkv = self.qkv(x).reshape(B, N, 3, self.attention_heads_count, self.head_dim)
-        qkv = qkv.permute(2, 0, 3, 1, 4)
-        q, k, v = qkv[0], qkv[1], qkv[2]
-
-        attn = (q @ k.transpose(-2, -1)) * self.scale
-        attn = attn.softmax(dim=-1)
-
-        out = (attn @ v).transpose(1, 2).reshape(B, N, C)
-        out = self.proj(out)
-        return out
-
-
-# Define MLP
-class MLP(nn.Module):
-    def __init__(
-        self, in_features, hidden_features=None, out_features=None, dropout_rate=0.0
-    ):
-        super(MLP, self).__init__()
-        out_features = out_features or in_features
-        hidden_features = hidden_features or in_features
-        self.fc1 = nn.Linear(in_features, hidden_features)
-        self.act = nn.GELU()
-        self.fc2 = nn.Linear(hidden_features, out_features)
-        self.dropout = nn.Dropout(dropout_rate)
-
-    def forward(self, x):
-        x = self.fc1(x)
-        x = self.act(x)
-        x = self.fc2(x)
+            [B, x.shape[1], -1]
+        )  # B, E, IH/P, IW/P -> B, E, (IH/P*IW/P) -> B, E, N    Flattening the patches
+        x = x.permute(
+            0, 2, 1
+        )  # B, E, N          -> B, N, E                         Rearrange to put sequence dimension in the middle
+        x = (
+            x + self.pos_embedding
+        )  # B, N, E          -> B, N, E                         Add positional embedding
+        x = torch.cat(
+            (torch.repeat_interleave(self.cls_token, B, 0), x), dim=1
+        )  # B, N, E          -> B, (N+1), E       -> B, S, E    Add classification token at the start of every sequence
         x = self.dropout(x)
         return x
 
 
-# Define the Transformer Block
-class TransformerBlock(nn.Module):
-    def __init__(
-        self, dim, attention_heads_count, mlp_ratio=4.0, dropout_rate=0.0, noise_std=0.1
-    ):
-        super(TransformerBlock, self).__init__()
-        self.norm1 = nn.LayerNorm(dim)
-        self.attn = Attention(dim, attention_heads_count)
-        self.norm2 = nn.LayerNorm(dim)
-        self.mlp = MLP(
-            dim, hidden_features=int(dim * mlp_ratio), dropout_rate=dropout_rate
-        )
-        self.noise_std = noise_std
+class SelfAttention(nn.Module):
+    def __init__(self, embed_dim, n_attention_heads):
+        super().__init__()
+        self.embed_dim = embed_dim
+        self.n_attention_heads = n_attention_heads
+        self.head_embed_dim = embed_dim // n_attention_heads
+
+        self.queries = nn.Linear(
+            self.embed_dim, self.head_embed_dim * self.n_attention_heads
+        )  # Queries projection
+        self.keys = nn.Linear(
+            self.embed_dim, self.head_embed_dim * self.n_attention_heads
+        )  # Keys projection
+        self.values = nn.Linear(
+            self.embed_dim, self.head_embed_dim * self.n_attention_heads
+        )  # Values projection
+        self.out_projection = nn.Linear(
+            self.head_embed_dim * self.n_attention_heads, self.embed_dim
+        )  # Out projection
 
     def forward(self, x):
-        x = x + self.attn(self.norm1(x))
-        x = x + self.mlp(self.norm2(x))
-        if self.training:  # Inject noise only during training
-            noise = torch.randn_like(x) * self.noise_std
-            x = x + noise
+        b, s, e = (
+            x.shape
+        )  # Note: In case of self-attention Q, K and V are all equal to S
+
+        xq = self.queries(x).reshape(
+            b, s, self.n_attention_heads, self.head_embed_dim
+        )  # B, Q, E      ->  B, Q, (H*HE)  ->  B, Q, H, HE
+        xq = xq.permute(0, 2, 1, 3)  # B, Q, H, HE  ->  B, H, Q, HE
+        xk = self.keys(x).reshape(
+            b, s, self.n_attention_heads, self.head_embed_dim
+        )  # B, K, E      ->  B, K, (H*HE)  ->  B, K, H, HE
+        xk = xk.permute(0, 2, 1, 3)  # B, K, H, HE  ->  B, H, K, HE
+        xv = self.values(x).reshape(
+            b, s, self.n_attention_heads, self.head_embed_dim
+        )  # B, V, E      ->  B, V, (H*HE)  ->  B, V, H, HE
+        xv = xv.permute(0, 2, 1, 3)  # B, V, H, HE  ->  B, H, V, HE
+
+        # Compute Attention presoftmax values
+        xk = xk.permute(0, 1, 3, 2)  # B, H, K, HE  ->  B, H, HE, K
+        x_attention = torch.matmul(
+            xq, xk
+        )  # B, H, Q, HE  *   B, H, HE, K   ->  B, H, Q, K    (Matmul tutorial eg: A, B, C, D  *  A, B, E, F  ->  A, B, C, F   if D==E)
+
+        x_attention /= (
+            float(self.head_embed_dim) ** 0.5
+        )  # Scale presoftmax values for stability
+
+        x_attention = torch.softmax(x_attention, dim=-1)  # Compute Attention Matrix
+
+        x = torch.matmul(
+            x_attention, xv
+        )  # B, H, Q, K  *  B, H, V, HE  ->  B, H, Q, HE     Compute Attention product with Values
+
+        # Format the output
+        x = x.permute(0, 2, 1, 3)  # B, H, Q, HE -> B, Q, H, HE
+        x = x.reshape(b, s, e)  # B, Q, H, HE -> B, Q, (H*HE)
+
+        x = self.out_projection(x)  # B, Q,(H*HE) -> B, Q, E
         return x
 
 
-# Define Vision Transformer
+class Encoder(nn.Module):
+    def __init__(self, embed_dim, n_attention_heads, forward_mul, dropout=0.0):
+        super().__init__()
+        self.norm1 = nn.LayerNorm(embed_dim)
+        self.attention = SelfAttention(embed_dim, n_attention_heads)
+        self.dropout1 = nn.Dropout(dropout)
+
+        self.norm2 = nn.LayerNorm(embed_dim)
+        self.fc1 = nn.Linear(embed_dim, embed_dim * forward_mul)
+        self.activation = nn.GELU()
+        self.fc2 = nn.Linear(embed_dim * forward_mul, embed_dim)
+        self.dropout2 = nn.Dropout(dropout)
+
+    def forward(self, x):
+        x = x + self.dropout1(self.attention(self.norm1(x)))  # Skip connections
+        x = x + self.dropout2(
+            self.fc2(self.activation(self.fc1(self.norm2(x))))
+        )  # Skip connections
+        return x
+
+
+class Classifier(nn.Module):
+    def __init__(self, embed_dim, n_classes):
+        super().__init__()
+        # New architectures skip fc1 and activations and directly apply fc2.
+        self.fc1 = nn.Linear(embed_dim, embed_dim)
+        self.activation = nn.Tanh()
+        self.fc2 = nn.Linear(embed_dim, n_classes)
+
+    def forward(self, x):
+        x = x[:, 0, :]  # Get CLS token
+        x = self.fc1(x)
+        x = self.activation(x)
+        x = self.fc2(x)
+        return x
+
+
 class VisionTransformer(nn.Module):
     def __init__(
         self,
+        n_channels,
+        embed_dim,
+        n_layers,
+        n_attention_heads,
+        forward_mul,
         image_size,
         patch_size,
-        input_channels,
-        embeddings_dimension,
-        depth,
-        attention_heads_count,
-        mlp_ratio=4.0,
-        dropout_rate=0.0,
-        num_classes=1000,
+        n_classes,
+        dropout=0.1,
     ):
-        super(VisionTransformer, self).__init__()
-        self.patch_embed = PatchEmbedding(
-            image_size, patch_size, input_channels, embeddings_dimension
+        super().__init__()
+        self.embedding = EmbedLayer(
+            n_channels, embed_dim, image_size, patch_size, dropout=dropout
         )
-        self.cls_token = nn.Parameter(torch.zeros(1, 1, embeddings_dimension))
-        self.pos_embed = nn.Parameter(
-            torch.zeros(1, 1 + self.patch_embed.num_patches, embeddings_dimension)
-        )
-        self.pos_drop = nn.Dropout(p=dropout_rate)
-
-        self.blocks = nn.ModuleList(
+        self.encoder = nn.ModuleList(
             [
-                TransformerBlock(
-                    embeddings_dimension, attention_heads_count, mlp_ratio, dropout_rate
-                )
-                for _ in range(depth)
+                Encoder(embed_dim, n_attention_heads, forward_mul, dropout=dropout)
+                for _ in range(n_layers)
             ]
         )
-        self.norm = nn.LayerNorm(embeddings_dimension)
-        self.head = nn.Linear(embeddings_dimension, num_classes)
+        self.norm = nn.LayerNorm(
+            embed_dim
+        )  # Final normalization layer after the last block
+        self.classifier = Classifier(embed_dim, n_classes)
+
+        self.apply(vit_init_weights)  # Weight initalization
 
     def forward(self, x):
-        B = x.shape[0]
-        x = self.patch_embed(x)
-        cls_tokens = self.cls_token.expand(B, -1, -1)
-        x = torch.cat((cls_tokens, x), dim=1)
-        x = x + self.pos_embed
-        x = self.pos_drop(x)
-
-        for blk in self.blocks:
-            x = blk(x)
-
+        x = self.embedding(x)
+        for block in self.encoder:
+            x = block(x)
         x = self.norm(x)
-        cls_token_final = x[:, 0]
-        x = self.head(cls_token_final)
+        x = self.classifier(x)
         return x
 
 
-# Define the HybridGenerator
-class HybridGenerator(nn.Module):
-    def __init__(
-        self,
-        config: Config,
-    ):
-        super(HybridGenerator, self).__init__()
-        self.init_size = (
-            config.image_size // 4
-        )  # Start with a quarter of the target size
-        self.embeddings_dimension = config.embeddings_dimension
-        self.linear = nn.Linear(
-            config.input_channels * config.image_size * config.image_size,
-            config.embeddings_dimension * self.init_size * self.init_size,
-        )
-        self.transformer_blocks = nn.ModuleList(
-            [
-                TransformerBlock(
-                    config.embeddings_dimension,
-                    config.attention_heads_count,
-                    config.mlp_ratio,
-                )
-                for _ in range(config.transformer_blocks_count)
-            ]
-        )
-        self.upsample_blocks = nn.ModuleList(
-            [
-                UpSampleBlock(
-                    config.embeddings_dimension, config.embeddings_dimension // 2
-                ),
-                UpSampleBlock(
-                    config.embeddings_dimension // 2, config.embeddings_dimension // 4
-                ),
-            ]
-        )
-        self.final_conv = nn.Conv2d(
-            config.embeddings_dimension // 4,
-            config.input_channel,
-            kernel_size=3,
-            padding=1,
-        )
-        self.tanh = nn.Tanh()
+def vit_init_weights(m):
+    if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
+        nn.init.trunc_normal_(m.weight, mean=0.0, std=0.02)
+        if m.bias is not None:
+            nn.init.constant_(m.bias, 0)
 
-    def forward(self, z):
-        # Flatten the spatial dimensions
-        batch_size, channels, height, width = z.shape
-        z = z.view(batch_size, -1)  # Shape: (batch_size, config.input_channels)
+    elif isinstance(m, nn.LayerNorm):
+        nn.init.constant_(m.weight, 1)
+        nn.init.constant_(m.bias, 0)
 
-        # Pass through the linear layer to get the desired embedding
-        x = self.linear(z).view(
-            batch_size, self.embeddings_dimension, self.init_size, self.init_size
-        )
-
-        # Continue with the rest of the forward pass
-        for transformer in self.transformer_blocks:
-            x = (
-                transformer(x.flatten(2).permute(2, 0, 1))
-                .permute(1, 2, 0)
-                .view(x.size())
-            )
-        for upsample in self.upsample_blocks:
-            x = upsample(x)
-        return self.tanh(self.final_conv(x))
+    elif isinstance(m, EmbedLayer):
+        nn.init.trunc_normal_(m.cls_token, mean=0.0, std=0.02)
+        nn.init.trunc_normal_(m.pos_embedding, mean=0.0, std=0.02)
 
 
 class Generator(nn.Module):
@@ -344,80 +341,68 @@ class Discriminator(nn.Module):
         return self.main(input).view(-1, 1).squeeze(1)
 
 
-class UpSampleBlock(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super(UpSampleBlock, self).__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
-        self.norm = nn.BatchNorm2d(out_channels)
-        self.relu = nn.ReLU()
-        self.upsample = nn.Upsample(
-            scale_factor=2, mode="bilinear", align_corners=False
-        )
-
-    def forward(self, x):
-        x = self.conv(x)
-        x = self.norm(x)
-        x = self.relu(x)
-        x = self.upsample(x)
-        return x
-
-
-# Define the HybridDiscriminator
-class HybridDiscriminator(nn.Module):
-    def __init__(self, config: Config):
-        super(HybridDiscriminator, self).__init__()
-        self.patch_embed = PatchEmbedding(
-            config.image_size,
-            config.patch_size,
-            config.input_channels,
-            config.embeddings_dimension,
-        )
-        self.cls_token = nn.Parameter(torch.zeros(1, 1, config.embeddings_dimension))
-        self.pos_embed = nn.Parameter(
-            torch.zeros(
-                1, 1 + self.patch_embed.num_patches, config.embeddings_dimension
-            )
-        )
-        self.pos_drop = nn.Dropout(0.1)
-
-        self.blocks = nn.ModuleList(
-            [
-                TransformerBlock(
-                    config.embeddings_dimension,
-                    config.attention_heads_count,
-                    config.mlp_ratio,
-                    dropout_rate=0.1,
-                )
-                for _ in range(config.transformer_blocks_count)
-            ]
-        )
-        self.norm = nn.LayerNorm(config.embeddings_dimension)
-        self.head = nn.Linear(config.embeddings_dimension, 1)
-
-    def forward(self, x):
-        B = x.shape[0]
-        x = self.patch_embed(x)
-        cls_tokens = self.cls_token.expand(B, -1, -1)
-        x = torch.cat((cls_tokens, x), dim=1)
-        x = x + self.pos_embed
-        x = self.pos_drop(x)
-
-        for blk in self.blocks:
-            x = blk(x)
-
-        x = self.norm(x)
-        x = self.head(x[:, 0])
-        return x
-
-
-class HybridViTGAN(nn.Module):
+class ViTGenerator(nn.Module):
     def __init__(
         self,
         config: Config,
     ):
         super().__init__()
-        self.generator = HybridGenerator(config)
-        self.discriminator = HybridDiscriminator(config)
+        self.vit = VisionTransformer(
+            n_channels=config.input_channels,
+            embed_dim=config.embeddings_dimension,
+            n_layers=config.transformer_blocks_count,
+            n_attention_heads=config.attention_heads_count,
+            forward_mul=config.mlp_ratio,
+            image_size=config.image_size,
+            patch_size=config.patch_size,
+            n_classes=config.classes_count,
+            dropout=config.dropout_rate,
+        )
+        self.linear = nn.Linear(
+            config.classes_count,
+            config.batch_size,
+        )
+        self.image_size = config.image_size
+        self.input_channels = config.input_channels
+
+    def forward(self, x):
+        x = self.vit(x)
+        x = self.linear(x)
+        x = x.view(-1, self.input_channels, self.image_size, self.image_size)
+        return x
+
+
+class ViTDiscriminator(nn.Module):
+    def __init__(
+        self,
+        config: Config,
+    ):
+        super().__init__()
+        self.vit = VisionTransformer(
+            n_channels=config.input_channels,
+            embed_dim=config.embeddings_dimension,
+            n_layers=config.transformer_blocks_count,
+            n_attention_heads=config.attention_heads_count,
+            forward_mul=config.mlp_ratio,
+            image_size=config.image_size,
+            patch_size=config.patch_size,
+            n_classes=config.classes_count,
+            dropout=config.dropout_rate,
+        )
+
+    def forward(self, x):
+        x = self.vit(x)
+        return x
+
+
+class ViTGAN(nn.Module):
+    def __init__(
+        self,
+        config: Config,
+    ):
+        super().__init__()
+        self.generator = ViTGenerator(config)
+        self.discriminator = ViTDiscriminator(config)
 
     def forward(self, z):
         generated_images = self.generator(z)
